@@ -4,6 +4,23 @@ La arquitectura de T.H.O.T.H. se organiza alrededor de un agente maestro encarga
 
 El sistema debe ser modular para permitir que agentes, skills, interfaces y mecanismos de almacenamiento evolucionen de forma independiente.
 
+## Vista General
+
+```mermaid
+flowchart TD
+  User[Usuario] --> LLM[Conversacion con LLM]
+  LLM --> Core[T.H.O.T.H. Core]
+  Core --> MCP[MCP Tools]
+  Core --> Agents[Agentes]
+  Core --> Skills[Skills]
+  MCP --> Wiki[LLM Wiki]
+  Agents --> Skills
+  Skills --> Wiki
+  Wiki --> Storage[Storage]
+  Wiki --> Index[Index]
+  CLI[CLI] --> Core
+```
+
 ## Componentes Principales
 
 ### T.H.O.T.H. Core
@@ -55,9 +72,15 @@ Puede incluir metadatos, etiquetas, relaciones, resumenes, referencias cruzadas 
 
 ### CLI
 
-La CLI sera la primera interfaz practica del sistema.
+La CLI sera la primera capa operativa local del sistema.
 
-Debe permitir acciones como inicializar un workspace, registrar informacion, consultar conocimiento, listar documentos, ejecutar skills y revisar el estado de la wiki.
+Debe permitir acciones como inicializar un workspace, administrar configuracion, diagnosticar el estado local, registrar informacion manualmente, consultar conocimiento, listar documentos, ejecutar skills y revisar el estado de la wiki.
+
+### MCP
+
+MCP sera la capa de herramientas que permita a T.H.O.T.H. operar dentro de conversaciones con un LLM.
+
+Debe exponer acciones seguras para capturar, consultar, actualizar y relacionar conocimiento sin depender de comandos manuales.
 
 ## Flujo General
 
@@ -68,6 +91,25 @@ Debe permitir acciones como inicializar un workspace, registrar informacion, con
 5. El Core valida, organiza y escribe el resultado en la LLM Wiki.
 6. El indice se actualiza con metadatos y relaciones relevantes.
 7. El usuario puede consultar, ampliar o reutilizar el conocimiento almacenado.
+
+```mermaid
+sequenceDiagram
+  participant User as Usuario
+  participant LLM as LLM Conversation
+  participant Core as T.H.O.T.H. Core
+  participant Tool as MCP Tool
+  participant Wiki as LLM Wiki
+  participant Index as Index
+
+  User->>LLM: Aporta informacion o solicita una consulta
+  LLM->>Core: Interpreta intencion y contexto
+  Core->>Tool: Invoca herramienta adecuada
+  Tool->>Wiki: Lee o escribe conocimiento
+  Wiki->>Index: Actualiza o consulta relaciones
+  Tool-->>Core: Devuelve resultado estructurado
+  Core-->>LLM: Entrega contexto procesado
+  LLM-->>User: Responde con resumen o confirmacion
+```
 
 ## Principios Arquitectonicos
 

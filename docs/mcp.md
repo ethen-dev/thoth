@@ -27,6 +27,24 @@ Flujo general:
 5. El resultado vuelve al LLM.
 6. El LLM responde al usuario con una confirmacion, resumen o consulta adicional.
 
+```mermaid
+sequenceDiagram
+  participant User as Usuario
+  participant LLM as LLM
+  participant Core as T.H.O.T.H. Core
+  participant MCP as MCP Tool
+  participant Wiki as LLM Wiki
+
+  User->>LLM: Solicita guardar o consultar conocimiento
+  LLM->>Core: Envia intencion y contexto
+  Core->>MCP: Selecciona herramienta y parametros
+  MCP->>Wiki: Ejecuta lectura o escritura controlada
+  Wiki-->>MCP: Devuelve documento, resultado o estado
+  MCP-->>Core: Devuelve respuesta estructurada
+  Core-->>LLM: Prepara respuesta contextual
+  LLM-->>User: Confirma, resume o pregunta
+```
+
 ## Relacion con CLI
 
 CLI y MCP deben compartir las mismas acciones internas.
@@ -35,6 +53,16 @@ La diferencia esta en la forma de exposicion:
 
 - **CLI:** uso manual desde terminal, administracion local y depuracion.
 - **MCP:** uso conversacional por parte de un LLM o agente.
+
+```mermaid
+flowchart LR
+  CLI[CLI] --> Actions[Acciones internas compartidas]
+  MCP[MCP Tools] --> Actions
+  Actions --> Core[T.H.O.T.H. Core]
+  Core --> Wiki[LLM Wiki]
+  Core --> Skills[Skills]
+  Core --> Agents[Agentes]
+```
 
 Ejemplo equivalente:
 
