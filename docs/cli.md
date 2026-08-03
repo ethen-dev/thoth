@@ -247,6 +247,24 @@ Responsabilidades:
 - actualizar `updated_at`
 - conservar el cuerpo Markdown del documento
 
+### thoth relate
+
+Crea una relacion explicita entre dos documentos existentes.
+
+Ejemplo:
+
+```bash
+thoth relate project-thoth implementation-index-cli --relation has_implementation
+```
+
+Responsabilidades:
+
+- validar que el documento fuente exista
+- validar que el documento destino exista
+- agregar una entrada a `related`
+- evitar relaciones duplicadas
+- actualizar `updated_at` del documento fuente
+
 ### thoth skill
 
 Lista o ejecuta skills disponibles.

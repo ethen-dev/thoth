@@ -9,6 +9,7 @@ import {
   initializeWiki,
   listWikiDocuments,
   lintWikiDocuments,
+  relateWikiDocuments,
   rebuildWikiIndex,
   searchWikiDocuments,
   updateWikiDocument,
@@ -281,6 +282,37 @@ program
         console.log(`Type: ${result.type}`);
         console.log(`Status: ${result.status}`);
         console.log(`Tags: ${result.tags.length > 0 ? result.tags.join(", ") : "none"}`);
+      } catch (error) {
+        reportError(error);
+      }
+    },
+  );
+
+program
+  .command("relate")
+  .description("Create a relation between wiki documents")
+  .argument("<source>", "Source document id")
+  .argument("<target>", "Target document id")
+  .requiredOption("--relation <relation>", "Relation type")
+  .action(
+    async (
+      source: string,
+      target: string,
+      options: { relation: string },
+    ) => {
+      try {
+        const config = await loadConfig();
+        const result = await relateWikiDocuments(config, {
+          sourceId: source,
+          targetId: target,
+          relation: options.relation,
+        });
+
+        console.log(`Source: ${result.source}`);
+        console.log(`Target: ${result.target}`);
+        console.log(`Relation: ${result.relation}`);
+        console.log(`Path: ${result.path}`);
+        console.log(`Status: ${result.created ? "created" : "exists"}`);
       } catch (error) {
         reportError(error);
       }

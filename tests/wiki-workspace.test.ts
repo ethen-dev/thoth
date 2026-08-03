@@ -10,6 +10,7 @@ import {
   initializeWiki,
   listWikiDocuments,
   lintWikiDocuments,
+  relateWikiDocuments,
   rebuildWikiIndex,
   searchWikiDocuments,
   updateWikiDocument,
@@ -204,6 +205,44 @@ Visible content.
     expect(raw).toContain("created_at: '20");
     expect(raw).not.toContain("created_at: 20");
     expect(raw).not.toContain("T00:00:00.000Z");
+  });
+
+  it("relates existing documents without duplicating relations", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    const source = await captureWikiDocument(config, {
+      content: "Source body.",
+      title: "Source Note",
+      type: "note",
+    });
+    const target = await captureWikiDocument(config, {
+      content: "Target body.",
+      title: "Target Note",
+      type: "note",
+    });
+
+    const firstResult = await relateWikiDocuments(config, {
+      sourceId: source.id,
+      targetId: target.id,
+      relation: "references",
+    });
+    const secondResult = await relateWikiDocuments(config, {
+      sourceId: source.id,
+      targetId: target.id,
+      relation: "references",
+    });
+    const document = await getWikiDocumentById(config, source.id);
+
+    expect(firstResult.created).toBe(true);
+    expect(secondResult.created).toBe(false);
+    expect(document?.metadata.related).toEqual([
+      {
+        id: target.id,
+        relation: "references",
+      },
+    ]);
   });
 
   it("searches wiki documents with metadata filters", async () => {

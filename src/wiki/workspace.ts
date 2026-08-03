@@ -87,6 +87,20 @@ export type WikiUpdateResult = {
   path: string;
 };
 
+export type WikiRelateInput = {
+  sourceId: string;
+  targetId: string;
+  relation: string;
+};
+
+export type WikiRelateResult = {
+  source: string;
+  target: string;
+  relation: string;
+  path: string;
+  created: boolean;
+};
+
 export type WikiSearchFilters = WikiListFilters;
 
 export type WikiSearchResult = WikiDocumentSummary & {
@@ -274,6 +288,46 @@ export async function updateWikiDocument(
     status: updatedDocument.status,
     tags: updatedDocument.tags,
     path: updatedDocument.path,
+  };
+}
+
+export async function relateWikiDocuments(
+  config: ResolvedThothConfig,
+  input: WikiRelateInput,
+): Promise<WikiRelateResult> {
+  const source = await findWikiDocumentById(config.resolvedWikiPath, input.sourceId);
+
+  if (!source) {
+    throw new Error(`Source document not found: ${input.sourceId}`);
+  }
+
+  const target = await findWikiDocumentById(config.resolvedWikiPath, input.targetId);
+
+  if (!target) {
+    throw new Error(`Target document not found: ${input.targetId}`);
+  }
+
+  const parsed = matter(source.document.raw);
+  const metadata = { ...(parsed.data as Record<string, unknown>) };
+  const relations = readRelations(metadata.related);
+  const exists = relations.some(
+    (relation) => relation.id === input.targetId && relation.relation === input.relation,
+  );
+
+  if (!exists) {
+    metadata.related = [...relations, { id: input.targetId, relation: input.relation }];
+    normalizeDateMetadata(metadata);
+    metadata.updated_at = currentDate();
+
+    await writeFile(source.path, matter.stringify(parsed.content, metadata), "utf8");
+  }
+
+  return {
+    source: input.sourceId,
+    target: input.targetId,
+    relation: input.relation,
+    path: source.document.path,
+    created: !exists,
   };
 }
 
