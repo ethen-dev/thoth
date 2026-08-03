@@ -10,14 +10,16 @@ import {
   listWikiDocuments,
   lintWikiDocuments,
   relateWikiDocuments,
+  rebuildHumanWikiIndex,
   rebuildWikiIndex,
   runWikiDoctor,
   searchWikiDocuments,
+  syncWikiRelationLinks,
   updateWikiDocument,
 } from "../actions/index.js";
 import { loadConfig } from "../core/index.js";
 
-const thothVersion = "0.3.1";
+const thothVersion = "0.5.0";
 const program = new Command();
 
 program
@@ -230,8 +232,9 @@ program
 
 program
   .command("index")
-  .description("Rebuild derived wiki indexes")
-  .action(async () => {
+  .description("Rebuild derived wiki indexes and optionally the human index")
+  .option("--human", "Also rebuild the human Markdown index.md")
+  .action(async (options: { human?: boolean }) => {
     try {
       const config = await loadConfig();
       const result = await rebuildWikiIndex(config);
@@ -247,6 +250,14 @@ program
         for (const warning of result.warnings) {
           console.log(`- ${warning}`);
         }
+      }
+
+      if (options.human) {
+        const humanIndex = await rebuildHumanWikiIndex(config);
+
+        console.log(`Human index documents: ${humanIndex.documentsIndexed}`);
+        console.log(`Human index relations: ${humanIndex.relationsIndexed}`);
+        console.log(`Human index: ${humanIndex.indexPath}`);
       }
     } catch (error) {
       reportError(error);
@@ -275,6 +286,22 @@ program
       }
 
       process.exitCode = 1;
+    } catch (error) {
+      reportError(error);
+    }
+  });
+
+program
+  .command("sync-links")
+  .description("Sync Markdown relation links from frontmatter related metadata")
+  .action(async () => {
+    try {
+      const config = await loadConfig();
+      const result = await syncWikiRelationLinks(config);
+
+      console.log(`Documents checked: ${result.documentsChecked}`);
+      console.log(`Documents updated: ${result.documentsUpdated}`);
+      console.log(`Links created: ${result.linksCreated}`);
     } catch (error) {
       reportError(error);
     }

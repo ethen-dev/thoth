@@ -21,6 +21,19 @@ const wikiDirectories = [
   "timelines",
 ] as const;
 
+const humanIndexSections = [
+  { heading: "Projects", type: "project" },
+  { heading: "Decisions", type: "decision" },
+  { heading: "Implementation", type: "implementation" },
+  { heading: "Logs", type: "log" },
+  { heading: "Notes", type: "note" },
+  { heading: "Ideas", type: "idea" },
+  { heading: "Research", type: "research" },
+  { heading: "Entities", type: "entity" },
+  { heading: "Sessions", type: "session" },
+  { heading: "Timelines", type: "timeline" },
+] as const;
+
 export type WikiStatus = {
   workspacePath: string;
   configPath: string;
@@ -134,6 +147,18 @@ export type WikiIndexResult = {
   indexPath: string;
   relationsPath: string;
   warnings: string[];
+};
+
+export type WikiHumanIndexResult = {
+  documentsIndexed: number;
+  relationsIndexed: number;
+  indexPath: string;
+};
+
+export type WikiSyncLinksResult = {
+  documentsChecked: number;
+  documentsUpdated: number;
+  linksCreated: number;
 };
 
 export type WikiLintIssue = {
@@ -371,8 +396,13 @@ export async function relateWikiDocuments(
     metadata.related = [...relations, { id: input.targetId, relation: input.relation }];
     normalizeDateMetadata(metadata);
     metadata.updated_at = currentDate();
+    const content = appendMarkdownRelation(parsed.content, {
+      relation: input.relation,
+      targetTitle: target.document.title,
+      targetPath: path.relative(path.dirname(source.path), target.path),
+    });
 
-    await writeFile(source.path, matter.stringify(parsed.content, metadata), "utf8");
+    await writeFile(source.path, matter.stringify(content, metadata), "utf8");
   }
 
   return {
@@ -494,6 +524,104 @@ export async function rebuildWikiIndex(
     indexPath: path.relative(config.resolvedWikiPath, indexPath),
     relationsPath: path.relative(config.resolvedWikiPath, relationsPath),
     warnings,
+  };
+}
+
+export async function rebuildHumanWikiIndex(
+  config: ResolvedThothConfig,
+): Promise<WikiHumanIndexResult> {
+  await ensureDirectory(config.resolvedWikiPath);
+
+  const markdownPaths = await collectMarkdownFiles(config.resolvedWikiPath);
+  const documents = (await Promise.all(
+    markdownPaths.map((markdownPath) => readWikiDocument(config.resolvedWikiPath, markdownPath)),
+  ))
+    .filter((document) => document.id !== "wiki-index")
+    .sort((left, right) => {
+      const typeOrder = humanIndexSections.findIndex((section) => section.type === left.type)
+        - humanIndexSections.findIndex((section) => section.type === right.type);
+
+      if (typeOrder !== 0) {
+        return typeOrder;
+      }
+
+      return left.title.localeCompare(right.title);
+    });
+
+  const indexPath = path.join(config.resolvedWikiPath, "index.md");
+
+  await writeFile(indexPath, createHumanWikiIndex(documents), "utf8");
+
+  return {
+    documentsIndexed: documents.length,
+    relationsIndexed: documents.flatMap((document) => readRelations(document.metadata.related)).length,
+    indexPath: path.relative(config.resolvedWikiPath, indexPath),
+  };
+}
+
+export async function syncWikiRelationLinks(
+  config: ResolvedThothConfig,
+): Promise<WikiSyncLinksResult> {
+  if (!(await pathExists(config.resolvedWikiPath))) {
+    return { documentsChecked: 0, documentsUpdated: 0, linksCreated: 0 };
+  }
+
+  const markdownPaths = await collectMarkdownFiles(config.resolvedWikiPath);
+  const documents = await Promise.all(
+    markdownPaths.map((markdownPath) => readWikiDocument(config.resolvedWikiPath, markdownPath)),
+  );
+  const documentsById = new Map(documents.map((document) => [document.id, document]));
+  let documentsUpdated = 0;
+  let linksCreated = 0;
+
+  for (const document of documents) {
+    const relations = readRelations(document.metadata.related);
+
+    if (relations.length === 0) {
+      continue;
+    }
+
+    const parsed = matter(document.raw);
+    const metadata = { ...(parsed.data as Record<string, unknown>) };
+    let content = parsed.content;
+    let documentLinksCreated = 0;
+
+    for (const relation of relations) {
+      const target = documentsById.get(relation.id);
+
+      if (!target) {
+        continue;
+      }
+
+      const nextContent = appendMarkdownRelation(content, {
+        relation: relation.relation,
+        targetTitle: target.title,
+        targetPath: path.relative(path.dirname(path.join(config.resolvedWikiPath, document.path)), path.join(config.resolvedWikiPath, target.path)),
+      });
+
+      if (nextContent !== content) {
+        content = nextContent;
+        documentLinksCreated += 1;
+      }
+    }
+
+    if (documentLinksCreated > 0) {
+      normalizeDateMetadata(metadata);
+      metadata.updated_at = currentDate();
+      await writeFile(
+        path.join(config.resolvedWikiPath, document.path),
+        matter.stringify(content, metadata),
+        "utf8",
+      );
+      documentsUpdated += 1;
+      linksCreated += documentLinksCreated;
+    }
+  }
+
+  return {
+    documentsChecked: documents.length,
+    documentsUpdated,
+    linksCreated,
   };
 }
 
@@ -759,6 +887,20 @@ function appendToSection(content: string, section: string, addition: string): st
     : sectionStart + nextHeading;
 
   return `${content.slice(0, insertAt).trimEnd()}\n\n${normalizedAddition}\n${content.slice(insertAt)}`;
+}
+
+function appendMarkdownRelation(
+  content: string,
+  input: { relation: string; targetTitle: string; targetPath: string },
+): string {
+  const targetPath = toPosixPath(input.targetPath);
+  const relationLine = `- ${input.relation}: [${input.targetTitle}](${targetPath})`;
+
+  if (content.includes(relationLine)) {
+    return content;
+  }
+
+  return appendToSection(content, "Relations", relationLine);
 }
 
 function escapeRegExp(value: string): string {
@@ -1035,4 +1177,85 @@ related: []
 
 Indice inicial de la LLM Wiki.
 `;
+}
+
+function createHumanWikiIndex(documents: WikiDocument[]): string {
+  const now = currentDate();
+  const sections = humanIndexSections
+    .map((section) => {
+      const items = documents.filter((document) => document.type === section.type);
+
+      if (items.length === 0) {
+        return `## ${section.heading}\n`;
+      }
+
+      return `## ${section.heading}\n\n${items
+        .map((document) => `- [${document.title}](${toPosixPath(document.path)})`)
+        .join("\n")}`;
+    })
+    .join("\n\n");
+
+  const knownTypes = new Set<string>(humanIndexSections.map((section) => section.type));
+  const otherDocuments = documents.filter((document) => !knownTypes.has(document.type));
+  const otherSection = otherDocuments.length === 0
+    ? "## Other\n"
+    : `## Other\n\n${otherDocuments
+      .map((document) => `- [${document.title}](${toPosixPath(document.path)})`)
+      .join("\n")}`;
+  const relationSection = createHumanRelationSection(documents);
+
+  return `---
+id: wiki-index
+title: T.H.O.T.H. Wiki Index
+type: reference
+status: active
+created_at: ${now}
+updated_at: ${now}
+tags:
+  - index
+  - thoth
+source: generated
+related: []
+---
+
+# T.H.O.T.H. Wiki Index
+
+## Summary
+
+Indice humano generado de la LLM Wiki.
+
+${sections}
+
+${otherSection}
+
+${relationSection}
+
+## Notes
+
+Este indice se regenera con \`thoth index --human\` e incluye enlaces por tipo y mapa de relaciones declarado en frontmatter.
+`;
+}
+
+function createHumanRelationSection(documents: WikiDocument[]): string {
+  const documentsById = new Map(documents.map((document) => [document.id, document]));
+  const relationLines = documents.flatMap((document) =>
+    readRelations(document.metadata.related).map((relation) => {
+      const target = documentsById.get(relation.id);
+      const targetLabel = target
+        ? `[${target.title}](${toPosixPath(target.path)})`
+        : `\`${relation.id}\``;
+
+      return `- [${document.title}](${toPosixPath(document.path)}) --${relation.relation}--> ${targetLabel}`;
+    }),
+  );
+
+  if (relationLines.length === 0) {
+    return "## Relation Map\n\nNo explicit relations declared yet.";
+  }
+
+  return `## Relation Map\n\n${relationLines.join("\n")}`;
+}
+
+function toPosixPath(value: string): string {
+  return value.split(path.sep).join("/");
 }

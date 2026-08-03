@@ -43,6 +43,8 @@ try {
   await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "search", "smoke"], tempRoot, {
     THOTH_CONFIG: path.join(workspacePath, "thoth.config.json"),
   });
+  await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "index", "--human"], workspacePath);
+  await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "sync-links"], workspacePath);
   await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "doctor"], workspacePath);
 
   await rm(tarballPath, { force: true });

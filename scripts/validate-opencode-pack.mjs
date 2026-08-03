@@ -38,8 +38,14 @@ const requiredAgentSnippets = [
   "thoth-critic",
   "study and memorize this project",
   "session log",
-  "thoth index",
+  "thoth index --human",
   "index status",
+  "Delegate every memory write to `thoth-scribe`",
+  "explicit relations",
+  "thoth relate",
+  "thoth sync-links",
+  "generated views",
+  "Markdown links",
   "pwd",
   "ls*",
   "rg*",
@@ -74,7 +80,11 @@ const requiredReadmeSnippets = [
   "thoth-scribe",
   "thoth-critic",
   "session log",
-  "thoth index",
+  "thoth index --human",
+  "thoth sync-links",
+  "explicit relations",
+  "generated navigation view",
+  "Markdown links",
 ];
 
 const requiredSubagentSnippets = [
@@ -91,7 +101,11 @@ const requiredAutonomousMemoryDocSnippets = [
   "Ignore By Default",
   "Memory Flow",
   "session log",
-  "thoth index",
+  "thoth index --human",
+  "small decisions",
+  "relation map",
+  "not the source of the graph",
+  "Markdown links",
   "Current Implementation Boundary",
 ];
 

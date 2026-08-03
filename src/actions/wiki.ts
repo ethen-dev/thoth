@@ -7,9 +7,11 @@ export {
   listWikiDocuments,
   lintWikiDocuments,
   relateWikiDocuments,
+  rebuildHumanWikiIndex,
   rebuildWikiIndex,
   runWikiDoctor,
   searchWikiDocuments,
+  syncWikiRelationLinks,
   updateWikiDocument,
 } from "../wiki/index.js";
 
@@ -23,6 +25,7 @@ export type {
   WikiDoctorCheck,
   WikiDoctorResult,
   WikiIndexResult,
+  WikiHumanIndexResult,
   WikiLintIssue,
   WikiLintResult,
   WikiListFilters,
@@ -31,6 +34,7 @@ export type {
   WikiSearchFilters,
   WikiSearchResult,
   WikiStatus,
+  WikiSyncLinksResult,
   WikiUpdateInput,
   WikiUpdateResult,
 } from "../wiki/index.js";

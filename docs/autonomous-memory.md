@@ -53,7 +53,7 @@ Do not save:
 2. Identify memory candidates.
 3. Search for related context.
 4. Capture, append, update, or relate using `thoth` commands.
-5. Run `thoth index` after writes.
+5. Run `thoth index --human` after writes.
 6. Run `thoth lint` or `thoth doctor` after substantial write sessions.
 7. Report the memory action in one short note.
 
@@ -69,7 +69,9 @@ When a user asks T.H.O.T.H. to study and memorize an existing project, the OpenC
 
 Safe read-only inspection should not require repeated confirmation. Memory writes and relation changes remain confirmed operations.
 
-Every project intake that writes memory should also create or append a session log in `logs/`, then run `thoth index`. The final receipt should state whether logging and indexing happened.
+Every memory write should pass through `thoth-scribe` or its writing rules, including small decisions. When source, target, and relation type are clear, memory writes should also create explicit frontmatter relations with `thoth relate`. Run `thoth sync-links` before `thoth index --human` so frontmatter relations are mirrored as Markdown links. Every project intake that writes memory should also create or append a session log in `logs/`, then run `thoth sync-links` and `thoth index --human`. The final receipt should state whether relations, link sync, logging, and indexing happened.
+
+The human index is not the source of the graph. It is a generated navigation view. Document relationships live in each document's frontmatter under `related` and should be created with `thoth relate`. For human and LLM readability, those same relationships should also appear as Markdown links in the source document's `## Relations` section. `thoth index --human` exposes declared relations as a relation map so humans and LLMs can follow the knowledge graph.
 
 ## Receipt Format
 
@@ -88,7 +90,7 @@ Memoria actualizada: relacioné <source-id> con <target-id> como <relation>.
 For project intake, include log and index status:
 
 ```text
-Memoria actualizada: guardé <count> documentos, actualicé el log <log-id> y regeneré el índice.
+Memoria actualizada: guardé <count> documentos, actualicé el log <log-id> y regeneré el índice humano y derivado.
 ```
 
 If memory was not written because confirmation is needed:

@@ -134,7 +134,7 @@ The primary agent should orchestrate the specialist agents:
 
 Read-only project inspection is allowed to reduce permission prompts. Memory writes still ask for confirmation.
 
-After a project study session that writes memory, the agent should also create or update a session log and run `thoth index`. Its final response should mention saved documents, log status, index status, and unresolved questions.
+All memory writes should pass through `thoth-scribe` or its writing rules, even for small decisions. The agent should create explicit relations with `thoth relate` when source, target, and relation type are clear. The index is only a generated navigation view; relationships should live in document frontmatter and be mirrored as Markdown links in `## Relations` with `thoth sync-links`. After a project study session that writes memory, the agent should also create or update a session log and run `thoth sync-links` plus `thoth index --human`. Its final response should mention saved documents, explicit relations, link sync status, log status, derived index status, human index status, and unresolved questions.
 
 ## Where Your Memory Lives
 

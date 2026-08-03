@@ -12,9 +12,11 @@ import {
   listWikiDocuments,
   lintWikiDocuments,
   relateWikiDocuments,
+  rebuildHumanWikiIndex,
   rebuildWikiIndex,
   runWikiDoctor,
   searchWikiDocuments,
+  syncWikiRelationLinks,
   updateWikiDocument,
 } from "../src/wiki/index.js";
 
@@ -135,6 +137,45 @@ status: active
     expect(decisionDocuments[0]?.id).toBe("decision-example");
     expect(tagDocuments).toHaveLength(1);
     expect(tagDocuments[0]?.id).toBe("decision-example");
+  });
+
+  it("rebuilds a human Markdown index with standard sections", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    const project = await captureWikiDocument(config, {
+      content: "Project body.",
+      title: "Example Project",
+      type: "project",
+      status: "active",
+    });
+    const decision = await captureWikiDocument(config, {
+      content: "Decision body.",
+      title: "Example Decision",
+      type: "decision",
+      status: "accepted",
+    });
+    await relateWikiDocuments(config, {
+      sourceId: project.id,
+      targetId: decision.id,
+      relation: "has_decision",
+    });
+
+    const result = await rebuildHumanWikiIndex(config);
+    const index = await readFile(path.join(config.resolvedWikiPath, "index.md"), "utf8");
+
+    expect(result.indexPath).toBe("index.md");
+    expect(result.documentsIndexed).toBe(2);
+    expect(result.relationsIndexed).toBe(1);
+    expect(index).toContain("## Projects");
+    expect(index).toContain("- [Example Project](projects/project-example-project.md)");
+    expect(index).toContain("## Decisions");
+    expect(index).toContain("- [Example Decision](decisions/decision-example-decision.md)");
+    expect(index).toContain("## Implementation");
+    expect(index).toContain("## Relation Map");
+    expect(index).toContain("[Example Project](projects/project-example-project.md) --has_decision--> [Example Decision](decisions/decision-example-decision.md)");
+    expect(index).toContain("thoth index --human");
   });
 
   it("gets a wiki document by id", async () => {
@@ -293,6 +334,55 @@ Visible content.
         relation: "references",
       },
     ]);
+    expect(document?.content).toContain("## Relations");
+    expect(document?.content).toContain(
+      "- references: [Target Note](note-target-note.md)",
+    );
+  });
+
+  it("syncs Markdown relation links from existing frontmatter relations", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    await writeFile(
+      path.join(config.resolvedWikiPath, "notes", "source.md"),
+      `---
+id: source-note
+title: Source Note
+type: note
+status: active
+related:
+  - id: target-note
+    relation: references
+---
+
+# Source Note
+`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(config.resolvedWikiPath, "notes", "target.md"),
+      `---
+id: target-note
+title: Target Note
+type: note
+status: active
+---
+
+# Target Note
+`,
+      "utf8",
+    );
+
+    const result = await syncWikiRelationLinks(config);
+    const source = await getWikiDocumentById(config, "source-note");
+
+    expect(result.documentsChecked).toBeGreaterThanOrEqual(3);
+    expect(result.documentsUpdated).toBe(1);
+    expect(result.linksCreated).toBe(1);
+    expect(source?.content).toContain("## Relations");
+    expect(source?.content).toContain("- references: [Target Note](target.md)");
   });
 
   it("searches wiki documents with metadata filters", async () => {
