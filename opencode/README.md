@@ -46,6 +46,8 @@ The first installer creates:
 - `~/Documents/Thoth/wiki`
 - `~/Documents/Thoth/workspace/thoth.config.json`
 
+It also installs dependencies, builds T.H.O.T.H., and installs the `thoth` command globally from the local repository.
+
 The second installer copies the OpenCode agent to:
 
 - `~/.config/opencode/agents/thoth-memory.md`

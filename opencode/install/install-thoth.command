@@ -41,8 +41,10 @@ fi
 run mkdir -p "$WORKSPACE_DIR" "$WIKI_DIR"
 
 if [[ "$DRY_RUN" == "yes" ]]; then
+  say "DRY RUN: would install dependencies and build T.H.O.T.H. in $REPO_DIR"
   say "DRY RUN: would install T.H.O.T.H. globally from $REPO_DIR"
 else
+  (cd "$REPO_DIR" && npm install && npm run build)
   npm install -g "$REPO_DIR"
 fi
 

@@ -47,8 +47,16 @@ if ($DryRun) {
 }
 
 if ($DryRun) {
+  Say "DRY RUN: would install dependencies and build T.H.O.T.H. in $RepoDir"
   Say "DRY RUN: would install T.H.O.T.H. globally from $RepoDir"
 } else {
+  Push-Location $RepoDir
+  try {
+    Run "npm" @("install")
+    Run "npm" @("run", "build")
+  } finally {
+    Pop-Location
+  }
   Run "npm" @("install", "-g", $RepoDir.Path)
 }
 

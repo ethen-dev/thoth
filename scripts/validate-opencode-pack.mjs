@@ -136,15 +136,15 @@ const macAgentDryRun = run(macAgentInstallerPath, ["--dry-run"]);
 const linuxThothDryRun = run(linuxThothInstallerPath, ["--dry-run"]);
 const linuxAgentDryRun = run(linuxAgentInstallerPath, ["--dry-run"]);
 
-assertIncludes(macThothDryRun, ["DRY RUN", "thoth init", "thoth doctor"], "macOS T.H.O.T.H. installer dry-run");
+assertIncludes(macThothDryRun, ["DRY RUN", "install dependencies", "thoth init", "thoth doctor"], "macOS T.H.O.T.H. installer dry-run");
 assertIncludes(macAgentDryRun, ["DRY RUN", "thoth-memory.md"], "macOS OpenCode agent installer dry-run");
-assertIncludes(linuxThothDryRun, ["DRY RUN", "thoth init", "thoth doctor"], "Linux T.H.O.T.H. installer dry-run");
+assertIncludes(linuxThothDryRun, ["DRY RUN", "install dependencies", "thoth init", "thoth doctor"], "Linux T.H.O.T.H. installer dry-run");
 assertIncludes(linuxAgentDryRun, ["DRY RUN", "thoth-memory.md"], "Linux OpenCode agent installer dry-run");
 
 const windowsThothInstaller = await readFile(windowsThothInstallerPath, "utf8");
 const windowsAgentInstaller = await readFile(windowsAgentInstallerPath, "utf8");
 
-assertIncludes(windowsThothInstaller, ["param(", "[switch]$DryRun", "npm", "thoth init", "thoth doctor"], "Windows T.H.O.T.H. installer");
+assertIncludes(windowsThothInstaller, ["param(", "[switch]$DryRun", "npm", "npm\" @(" , "thoth init", "thoth doctor"], "Windows T.H.O.T.H. installer");
 assertIncludes(windowsAgentInstaller, ["param(", "[switch]$DryRun", "thoth-memory.md", "Copy-Item"], "Windows OpenCode agent installer");
 
 const powershell = findCommand(["pwsh", "powershell"]);
