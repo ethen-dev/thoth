@@ -265,6 +265,26 @@ Responsabilidades:
 - evitar relaciones duplicadas
 - actualizar `updated_at` del documento fuente
 
+### thoth doctor
+
+Diagnostica el workspace y la wiki configurada.
+
+Ejemplo:
+
+```bash
+thoth doctor
+```
+
+Responsabilidades:
+
+- confirmar que la configuracion carga
+- confirmar que la wiki existe
+- confirmar estructura de directorios requerida
+- ejecutar lint
+- regenerar indices derivados como comprobacion
+- mostrar version CLI/MCP
+- devolver codigo no-cero si algun check falla
+
 ### thoth skill
 
 Lista o ejecuta skills disponibles.

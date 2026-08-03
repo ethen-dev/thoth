@@ -7,6 +7,7 @@ export {
   lintWikiDocuments,
   relateWikiDocuments,
   rebuildWikiIndex,
+  runWikiDoctor,
   searchWikiDocuments,
   updateWikiDocument,
 } from "../wiki/index.js";
@@ -16,6 +17,8 @@ export type {
   WikiCaptureResult,
   WikiDocument,
   WikiDocumentSummary,
+  WikiDoctorCheck,
+  WikiDoctorResult,
   WikiIndexResult,
   WikiLintIssue,
   WikiLintResult,

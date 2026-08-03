@@ -131,6 +131,17 @@ export type WikiLintResult = {
   issues: WikiLintIssue[];
 };
 
+export type WikiDoctorCheck = {
+  name: string;
+  status: "pass" | "fail";
+  message: string;
+};
+
+export type WikiDoctorResult = {
+  ok: boolean;
+  checks: WikiDoctorCheck[];
+};
+
 export async function getWikiStatus(
   config: ResolvedThothConfig,
 ): Promise<WikiStatus> {
@@ -505,6 +516,75 @@ export async function lintWikiDocuments(
     issues: issues.sort((left, right) =>
       `${left.path}:${left.message}`.localeCompare(`${right.path}:${right.message}`),
     ),
+  };
+}
+
+export async function runWikiDoctor(
+  config: ResolvedThothConfig,
+): Promise<WikiDoctorResult> {
+  const checks: WikiDoctorCheck[] = [];
+  const status = await getWikiStatus(config);
+
+  checks.push({
+    name: "config",
+    status: "pass",
+    message: `Loaded ${config.configPath}`,
+  });
+  checks.push({
+    name: "wiki",
+    status: status.wikiExists ? "pass" : "fail",
+    message: status.wikiExists
+      ? `Wiki exists at ${status.wikiPath}`
+      : `Wiki not found at ${status.wikiPath}`,
+  });
+  checks.push({
+    name: "structure",
+    status: status.missingDirectories.length === 0 ? "pass" : "fail",
+    message: status.missingDirectories.length === 0
+      ? "Required directories exist"
+      : `Missing directories: ${status.missingDirectories.join(", ")}`,
+  });
+
+  if (status.wikiExists) {
+    const lint = await lintWikiDocuments(config);
+    checks.push({
+      name: "lint",
+      status: lint.issues.length === 0 ? "pass" : "fail",
+      message: lint.issues.length === 0
+        ? `No issues across ${lint.documentsChecked} documents`
+        : `${lint.issues.length} issues across ${lint.documentsChecked} documents`,
+    });
+
+    try {
+      const index = await rebuildWikiIndex(config);
+      checks.push({
+        name: "index",
+        status: "pass",
+        message: `Regenerated ${index.documentsIndexed} documents and ${index.relationsIndexed} relations`,
+      });
+    } catch (error) {
+      checks.push({
+        name: "index",
+        status: "fail",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  } else {
+    checks.push({
+      name: "lint",
+      status: "fail",
+      message: "Skipped because wiki does not exist",
+    });
+    checks.push({
+      name: "index",
+      status: "fail",
+      message: "Skipped because wiki does not exist",
+    });
+  }
+
+  return {
+    ok: checks.every((check) => check.status === "pass"),
+    checks,
   };
 }
 

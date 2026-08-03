@@ -12,6 +12,7 @@ import {
   lintWikiDocuments,
   relateWikiDocuments,
   rebuildWikiIndex,
+  runWikiDoctor,
   searchWikiDocuments,
   updateWikiDocument,
 } from "../src/wiki/index.js";
@@ -413,6 +414,25 @@ type: note
       path: "notes/missing-status.md",
       message: "Missing required frontmatter: status",
     });
+  });
+
+  it("diagnoses an initialized wiki", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    const result = await runWikiDoctor(config);
+
+    expect(result.ok).toBe(true);
+    expect(result.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "config", status: "pass" }),
+        expect.objectContaining({ name: "wiki", status: "pass" }),
+        expect.objectContaining({ name: "structure", status: "pass" }),
+        expect.objectContaining({ name: "lint", status: "pass" }),
+        expect.objectContaining({ name: "index", status: "pass" }),
+      ]),
+    );
   });
 });
 

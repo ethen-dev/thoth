@@ -10,17 +10,19 @@ import {
   lintWikiDocuments,
   relateWikiDocuments,
   rebuildWikiIndex,
+  runWikiDoctor,
   searchWikiDocuments,
   updateWikiDocument,
 } from "../actions/index.js";
 import { loadConfig } from "../core/index.js";
 
+const thothVersion = "0.1.0";
 const program = new Command();
 
 program
   .name("thoth")
   .description("T.H.O.T.H. local operations CLI")
-  .version("0.1.0");
+  .version(thothVersion);
 
 program
   .command("init")
@@ -318,6 +320,29 @@ program
       }
     },
   );
+
+program
+  .command("doctor")
+  .description("Diagnose workspace and wiki health")
+  .action(async () => {
+    try {
+      const config = await loadConfig();
+      const result = await runWikiDoctor(config);
+
+      console.log(`CLI version: ${thothVersion}`);
+      console.log(`MCP version: ${thothVersion}`);
+
+      for (const check of result.checks) {
+        console.log(`${check.status === "pass" ? "PASS" : "FAIL"}\t${check.name}\t${check.message}`);
+      }
+
+      if (!result.ok) {
+        process.exitCode = 1;
+      }
+    } catch (error) {
+      reportError(error);
+    }
+  });
 
 program.parse();
 
