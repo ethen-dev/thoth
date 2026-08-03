@@ -28,6 +28,8 @@ Package smoke test:
 npm run package:smoke
 ```
 
+This command builds the project, runs `npm pack`, installs the tarball in a temporary workspace, and exercises installed `thoth` and `thoth-mcp` binaries.
+
 Run the CLI from source:
 
 ```bash
