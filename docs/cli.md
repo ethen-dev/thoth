@@ -207,6 +207,9 @@ Responsabilidades:
 - validar metadatos minimos
 - actualizar `wiki/index.md`
 - detectar documentos sin relaciones, tags o resumen
+- generar `.thoth/index.json`
+- generar `.thoth/relations.json`
+- advertir sobre relaciones rotas o IDs duplicados
 
 ### thoth skill
 

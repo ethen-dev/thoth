@@ -8,6 +8,7 @@ import {
   getWikiStatus,
   initializeWiki,
   listWikiDocuments,
+  rebuildWikiIndex,
   searchWikiDocuments,
 } from "../wiki/index.js";
 
@@ -191,6 +192,31 @@ program
       }
     },
   );
+
+program
+  .command("index")
+  .description("Rebuild derived wiki indexes")
+  .action(async () => {
+    try {
+      const config = await loadConfig();
+      const result = await rebuildWikiIndex(config);
+
+      console.log(`Documents indexed: ${result.documentsIndexed}`);
+      console.log(`Relations indexed: ${result.relationsIndexed}`);
+      console.log(`Index: ${result.indexPath}`);
+      console.log(`Relations: ${result.relationsPath}`);
+
+      if (result.warnings.length > 0) {
+        console.log("Warnings:");
+
+        for (const warning of result.warnings) {
+          console.log(`- ${warning}`);
+        }
+      }
+    } catch (error) {
+      reportError(error);
+    }
+  });
 
 program.parse();
 

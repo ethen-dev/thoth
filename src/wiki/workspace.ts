@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import matter from "gray-matter";
 import type { ResolvedThothConfig } from "../core/config.js";
@@ -74,6 +74,20 @@ export type WikiSearchFilters = WikiListFilters;
 
 export type WikiSearchResult = WikiDocumentSummary & {
   snippet: string;
+};
+
+export type WikiRelation = {
+  source: string;
+  target: string;
+  relation: string;
+};
+
+export type WikiIndexResult = {
+  documentsIndexed: number;
+  relationsIndexed: number;
+  indexPath: string;
+  relationsPath: string;
+  warnings: string[];
 };
 
 export async function getWikiStatus(
@@ -249,6 +263,74 @@ export async function searchWikiDocuments(
   return results.sort((left, right) => left.path.localeCompare(right.path));
 }
 
+export async function rebuildWikiIndex(
+  config: ResolvedThothConfig,
+): Promise<WikiIndexResult> {
+  await ensureDirectory(path.join(config.resolvedWikiPath, ".thoth"));
+
+  const markdownPaths = await collectMarkdownFiles(config.resolvedWikiPath);
+  const documents: WikiDocumentSummary[] = [];
+  const relations: WikiRelation[] = [];
+  const warnings: string[] = [];
+  const seenIds = new Set<string>();
+
+  for (const markdownPath of markdownPaths) {
+    const document = await readWikiDocument(config.resolvedWikiPath, markdownPath);
+
+    if (seenIds.has(document.id)) {
+      warnings.push(`Duplicate document id: ${document.id}`);
+    }
+
+    seenIds.add(document.id);
+    documents.push(toDocumentSummary(document));
+
+    for (const relation of readRelations(document.metadata.related)) {
+      relations.push({
+        source: document.id,
+        target: relation.id,
+        relation: relation.relation,
+      });
+    }
+  }
+
+  for (const relation of relations) {
+    if (!seenIds.has(relation.target)) {
+      warnings.push(
+        `Broken relation: ${relation.source} -> ${relation.target} (${relation.relation})`,
+      );
+    }
+  }
+
+  documents.sort((left, right) => left.path.localeCompare(right.path));
+  relations.sort((left, right) =>
+    `${left.source}:${left.target}:${left.relation}`.localeCompare(
+      `${right.source}:${right.target}:${right.relation}`,
+    ),
+  );
+
+  const indexPath = path.join(config.resolvedWikiPath, ".thoth", "index.json");
+  const relationsPath = path.join(config.resolvedWikiPath, ".thoth", "relations.json");
+
+  await writeFile(
+    indexPath,
+    `${JSON.stringify({ documents, warnings }, null, 2)}\n`,
+    "utf8",
+  );
+  await writeFile(
+    relationsPath,
+    `${JSON.stringify({ relations, warnings }, null, 2)}\n`,
+    "utf8",
+  );
+
+  return {
+    documentsIndexed: documents.length,
+    relationsIndexed: relations.length,
+    indexPath: path.relative(config.resolvedWikiPath, indexPath),
+    relationsPath: path.relative(config.resolvedWikiPath, relationsPath),
+    warnings,
+  };
+}
+
 async function readWikiDocument(
   wikiPath: string,
   markdownPath: string,
@@ -312,6 +394,39 @@ function matchesFilters(
   }
 
   return true;
+}
+
+function toDocumentSummary(document: WikiDocument): WikiDocumentSummary {
+  return {
+    id: document.id,
+    title: document.title,
+    type: document.type,
+    status: document.status,
+    tags: document.tags,
+    path: document.path,
+  };
+}
+
+function readRelations(value: unknown): Array<{ id: string; relation: string }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return [];
+    }
+
+    const relation = entry as Record<string, unknown>;
+    const id = relation.id;
+    const relationType = relation.relation;
+
+    if (typeof id !== "string" || typeof relationType !== "string") {
+      return [];
+    }
+
+    return [{ id, relation: relationType }];
+  });
 }
 
 function readString(value: unknown, fallback: string): string {

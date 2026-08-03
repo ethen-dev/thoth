@@ -9,6 +9,7 @@ import {
   getWikiStatus,
   initializeWiki,
   listWikiDocuments,
+  rebuildWikiIndex,
   searchWikiDocuments,
 } from "../src/wiki/index.js";
 
@@ -219,6 +220,56 @@ durable context
     expect(tagResults).toHaveLength(1);
     expect(noResults).toHaveLength(0);
     expect(results[0]?.snippet).toContain("durable context");
+  });
+
+  it("rebuilds derived indexes and reports broken relations", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    await writeFile(
+      path.join(config.resolvedWikiPath, "projects", "project-index.md"),
+      `---
+id: project-index
+title: Project Index
+type: project
+status: active
+tags:
+  - index
+related:
+  - id: missing-document
+    relation: references
+---
+
+# Project Index
+`,
+      "utf8",
+    );
+
+    const result = await rebuildWikiIndex(config);
+    const index = JSON.parse(
+      await readFile(path.join(config.resolvedWikiPath, ".thoth", "index.json"), "utf8"),
+    ) as { documents: Array<{ id: string }> };
+    const relations = JSON.parse(
+      await readFile(
+        path.join(config.resolvedWikiPath, ".thoth", "relations.json"),
+        "utf8",
+      ),
+    ) as { relations: Array<{ source: string; target: string; relation: string }> };
+
+    expect(result.documentsIndexed).toBeGreaterThan(0);
+    expect(result.relationsIndexed).toBe(1);
+    expect(result.warnings).toContain(
+      "Broken relation: project-index -> missing-document (references)",
+    );
+    expect(index.documents.map((document) => document.id)).toContain("project-index");
+    expect(relations.relations).toEqual([
+      {
+        source: "project-index",
+        target: "missing-document",
+        relation: "references",
+      },
+    ]);
   });
 });
 
