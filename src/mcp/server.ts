@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod/v4";
@@ -150,8 +151,14 @@ function jsonResult(value: unknown) {
   };
 }
 
-if (process.argv.includes("--version")) {
-  console.log("thoth-mcp 0.1.0");
-} else {
-  await startThothMcpServer();
+if (isDirectEntrypoint()) {
+  if (process.argv.includes("--version")) {
+    console.log("thoth-mcp 0.1.0");
+  } else {
+    await startThothMcpServer();
+  }
+}
+
+function isDirectEntrypoint(): boolean {
+  return process.argv[1] === fileURLToPath(import.meta.url);
 }

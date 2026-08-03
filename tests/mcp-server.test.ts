@@ -1,0 +1,69 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { loadConfig } from "../src/core/index.js";
+import { createThothMcpServer } from "../src/mcp/server.js";
+import { initializeWiki } from "../src/wiki/index.js";
+
+const tempDirectories: string[] = [];
+const originalCwd = process.cwd();
+
+afterEach(async () => {
+  process.chdir(originalCwd);
+  await Promise.all(
+    tempDirectories.splice(0).map((directory) =>
+      rm(directory, { recursive: true, force: true }),
+    ),
+  );
+});
+
+describe("MCP server", () => {
+  it("lists tools and calls wiki_lint through an MCP client", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    process.chdir(workspacePath);
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createThothMcpServer();
+    const client = new Client({ name: "thoth-test-client", version: "0.1.0" });
+
+    await Promise.all([
+      server.connect(serverTransport),
+      client.connect(clientTransport),
+    ]);
+
+    try {
+      const tools = await client.listTools();
+      const lintResult = await client.callTool({ name: "wiki_lint", arguments: {} });
+
+      expect(tools.tools.map((tool) => tool.name)).toEqual(
+        expect.arrayContaining(["wiki_search", "wiki_show", "wiki_capture", "wiki_index", "wiki_lint"]),
+      );
+      expect(lintResult.content[0]).toMatchObject({ type: "text" });
+      expect(JSON.parse(lintResult.content[0]?.type === "text" ? lintResult.content[0].text : "{}"))
+        .toMatchObject({ documentsChecked: 1, issues: [] });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+});
+
+async function createWorkspace(config: { wikiPath: string }): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "thoth-mcp-test-"));
+  tempDirectories.push(root);
+
+  const workspacePath = path.join(root, "thoth");
+  await mkdir(workspacePath, { recursive: true });
+  await writeFile(
+    path.join(workspacePath, "thoth.config.json"),
+    JSON.stringify(config),
+    "utf8",
+  );
+
+  return workspacePath;
+}
