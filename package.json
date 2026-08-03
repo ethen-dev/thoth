@@ -9,12 +9,14 @@
   },
   "files": [
     "dist",
+    "opencode",
     "schemas"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli/index.ts",
     "mcp:dev": "tsx src/mcp/server.ts",
+    "opencode:validate": "node scripts/validate-opencode-pack.mjs",
     "package:smoke": "node scripts/package-smoke.mjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
