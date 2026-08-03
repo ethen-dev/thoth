@@ -22,6 +22,12 @@ npm install
 npm run build
 ```
 
+Package smoke test:
+
+```bash
+npm run package:smoke
+```
+
 Run the CLI from source:
 
 ```bash

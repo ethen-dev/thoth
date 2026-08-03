@@ -15,6 +15,7 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli/index.ts",
     "mcp:dev": "tsx src/mcp/server.ts",
+    "package:smoke": "node scripts/package-smoke.mjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
