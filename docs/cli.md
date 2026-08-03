@@ -264,11 +264,13 @@ Este flujo manual debe servir tambien como base para definir herramientas MCP eq
 
 La CLI debe usar un archivo `thoth.config.json` en la raiz del workspace.
 
+`wikiPath` define donde vive la LLM Wiki. Puede apuntar a una carpeta dentro o fuera del repositorio. En el workspace actual de desarrollo de T.H.O.T.H., la wiki vive fuera del repo y se referencia como `../wiki`.
+
 Configuracion inicial propuesta:
 
 ```json
 {
-  "wikiPath": "wiki",
+  "wikiPath": "../wiki",
   "defaultType": "note",
   "defaultStatus": "draft",
   "dateFormat": "YYYY-MM-DD"

@@ -159,5 +159,6 @@ La prioridad tecnica inmediata es construir una base simple y fiable:
 5. CLI minima
 6. MCP minimo
 7. Memory Protocol basico
+8. skill pack LLM Wiki para config, ingest, query, lint, integrate y crystallize
 
 Solo despues deberian entrar grafo, RAG y backends opcionales.

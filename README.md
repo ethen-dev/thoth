@@ -14,4 +14,6 @@ Este repositorio contiene la base del proyecto T.H.O.T.H.: agentes, skills, estr
 
 La intencion es que T.H.O.T.H. pueda evolucionar hacia una herramienta practica, incluyendo interfaces como CLI, flujos de trabajo configurables y mecanismos para almacenar, consultar y extender conocimiento de forma modular.
 
+La wiki no forma parte del repositorio del proyecto. Para este workspace, T.H.O.T.H. usara la ruta definida en `thoth.config.json`: `../wiki`.
+
 Este README se ampliara progresivamente a medida que el proyecto defina su arquitectura, flujo de trabajo, agentes especializados, skills, CLI y modelo de almacenamiento.
