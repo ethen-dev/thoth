@@ -2,7 +2,12 @@
 
 import { Command } from "commander";
 import { loadConfig } from "../core/index.js";
-import { getWikiStatus, initializeWiki, listWikiDocuments } from "../wiki/index.js";
+import {
+  getWikiDocumentById,
+  getWikiStatus,
+  initializeWiki,
+  listWikiDocuments,
+} from "../wiki/index.js";
 
 const program = new Command();
 
@@ -78,6 +83,42 @@ program
       reportError(error);
     }
   });
+
+program
+  .command("show")
+  .description("Show a wiki document by id")
+  .argument("<id>", "Document id")
+  .option("--raw", "Print raw Markdown including frontmatter")
+  .option("--metadata", "Print document metadata as JSON")
+  .action(
+    async (
+      id: string,
+      options: { raw?: boolean; metadata?: boolean },
+    ) => {
+      try {
+        const config = await loadConfig();
+        const document = await getWikiDocumentById(config, id);
+
+        if (!document) {
+          throw new Error(`Document not found: ${id}`);
+        }
+
+        if (options.raw) {
+          console.log(document.raw);
+          return;
+        }
+
+        if (options.metadata) {
+          console.log(JSON.stringify(document.metadata, null, 2));
+          return;
+        }
+
+        console.log(document.content.trimEnd());
+      } catch (error) {
+        reportError(error);
+      }
+    },
+  );
 
 program.parse();
 

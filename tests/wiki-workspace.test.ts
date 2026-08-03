@@ -3,7 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/core/index.js";
-import { getWikiStatus, initializeWiki, listWikiDocuments } from "../src/wiki/index.js";
+import {
+  getWikiDocumentById,
+  getWikiStatus,
+  initializeWiki,
+  listWikiDocuments,
+} from "../src/wiki/index.js";
 
 const tempDirectories: string[] = [];
 
@@ -96,6 +101,41 @@ status: active
     expect(decisionDocuments[0]?.id).toBe("decision-example");
     expect(tagDocuments).toHaveLength(1);
     expect(tagDocuments[0]?.id).toBe("decision-example");
+  });
+
+  it("gets a wiki document by id", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    await writeFile(
+      path.join(config.resolvedWikiPath, "projects", "project-example.md"),
+      `---
+id: project-example
+title: Example Project
+type: project
+status: active
+tags:
+  - example
+---
+
+# Example Project
+
+## Summary
+
+Visible content.
+`,
+      "utf8",
+    );
+
+    const document = await getWikiDocumentById(config, "project-example");
+    const missingDocument = await getWikiDocumentById(config, "missing");
+
+    expect(document?.title).toBe("Example Project");
+    expect(document?.metadata.title).toBe("Example Project");
+    expect(document?.content).toContain("Visible content.");
+    expect(document?.raw).toContain("id: project-example");
+    expect(missingDocument).toBeNull();
   });
 });
 

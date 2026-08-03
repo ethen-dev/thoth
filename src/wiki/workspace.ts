@@ -38,6 +38,12 @@ export type WikiDocumentSummary = {
   path: string;
 };
 
+export type WikiDocument = WikiDocumentSummary & {
+  metadata: Record<string, unknown>;
+  content: string;
+  raw: string;
+};
+
 export type WikiListFilters = {
   type?: string;
   status?: string;
@@ -109,19 +115,7 @@ export async function listWikiDocuments(
   const documents: WikiDocumentSummary[] = [];
 
   for (const markdownPath of markdownPaths) {
-    const raw = await readFile(markdownPath, "utf8");
-    const parsed = matter(raw);
-    const data = parsed.data as Record<string, unknown>;
-    const relativePath = path.relative(config.resolvedWikiPath, markdownPath);
-
-    const document: WikiDocumentSummary = {
-      id: readString(data.id, relativePath),
-      title: readString(data.title, path.basename(markdownPath, ".md")),
-      type: readString(data.type, "unknown"),
-      status: readString(data.status, "unknown"),
-      tags: readStringArray(data.tags),
-      path: relativePath,
-    };
+    const document = await readWikiDocument(config.resolvedWikiPath, markdownPath);
 
     if (matchesFilters(document, filters)) {
       documents.push(document);
@@ -129,6 +123,49 @@ export async function listWikiDocuments(
   }
 
   return documents.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+export async function getWikiDocumentById(
+  config: ResolvedThothConfig,
+  documentId: string,
+): Promise<WikiDocument | null> {
+  if (!(await pathExists(config.resolvedWikiPath))) {
+    return null;
+  }
+
+  const markdownPaths = await collectMarkdownFiles(config.resolvedWikiPath);
+
+  for (const markdownPath of markdownPaths) {
+    const document = await readWikiDocument(config.resolvedWikiPath, markdownPath);
+
+    if (document.id === documentId) {
+      return document;
+    }
+  }
+
+  return null;
+}
+
+async function readWikiDocument(
+  wikiPath: string,
+  markdownPath: string,
+): Promise<WikiDocument> {
+  const raw = await readFile(markdownPath, "utf8");
+  const parsed = matter(raw);
+  const metadata = parsed.data as Record<string, unknown>;
+  const relativePath = path.relative(wikiPath, markdownPath);
+
+  return {
+    id: readString(metadata.id, relativePath),
+    title: readString(metadata.title, path.basename(markdownPath, ".md")),
+    type: readString(metadata.type, "unknown"),
+    status: readString(metadata.status, "unknown"),
+    tags: readStringArray(metadata.tags),
+    path: relativePath,
+    metadata,
+    content: parsed.content.trimStart(),
+    raw,
+  };
 }
 
 async function collectMarkdownFiles(directoryPath: string): Promise<string[]> {
