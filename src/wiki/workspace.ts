@@ -70,6 +70,12 @@ export type WikiCaptureResult = {
   created: boolean;
 };
 
+export type WikiSearchFilters = WikiListFilters;
+
+export type WikiSearchResult = WikiDocumentSummary & {
+  snippet: string;
+};
+
 export async function getWikiStatus(
   config: ResolvedThothConfig,
 ): Promise<WikiStatus> {
@@ -196,6 +202,51 @@ export async function captureWikiDocument(
     path: relativePath,
     created: result === "created",
   };
+}
+
+export async function searchWikiDocuments(
+  config: ResolvedThothConfig,
+  query: string,
+  filters: WikiSearchFilters = {},
+): Promise<WikiSearchResult[]> {
+  if (!(await pathExists(config.resolvedWikiPath))) {
+    return [];
+  }
+
+  const normalizedQuery = query.trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  const markdownPaths = await collectMarkdownFiles(config.resolvedWikiPath);
+  const results: WikiSearchResult[] = [];
+
+  for (const markdownPath of markdownPaths) {
+    const document = await readWikiDocument(config.resolvedWikiPath, markdownPath);
+
+    if (!matchesFilters(document, filters)) {
+      continue;
+    }
+
+    const searchableText = [
+      document.id,
+      document.title,
+      document.type,
+      document.status,
+      document.tags.join(" "),
+      document.content,
+    ].join("\n");
+
+    if (searchableText.toLowerCase().includes(normalizedQuery)) {
+      results.push({
+        ...document,
+        snippet: createSnippet(searchableText, normalizedQuery),
+      });
+    }
+  }
+
+  return results.sort((left, right) => left.path.localeCompare(right.path));
 }
 
 async function readWikiDocument(
@@ -356,6 +407,22 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 
   return slug || "untitled";
+}
+
+function createSnippet(text: string, normalizedQuery: string): string {
+  const compactText = text.replace(/\s+/g, " ").trim();
+  const index = compactText.toLowerCase().indexOf(normalizedQuery);
+
+  if (index === -1) {
+    return compactText.slice(0, 120);
+  }
+
+  const start = Math.max(0, index - 40);
+  const end = Math.min(compactText.length, index + normalizedQuery.length + 80);
+  const prefix = start > 0 ? "..." : "";
+  const suffix = end < compactText.length ? "..." : "";
+
+  return `${prefix}${compactText.slice(start, end)}${suffix}`;
 }
 
 function createWikiIndex(): string {

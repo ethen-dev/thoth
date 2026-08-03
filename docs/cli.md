@@ -187,6 +187,7 @@ Responsabilidades:
 - buscar por texto en documentos Markdown
 - permitir filtros basicos por tipo o tag
 - devolver coincidencias con id, titulo y ruta
+- generar snippets simples para ubicar la coincidencia
 
 En versiones futuras podra evolucionar hacia busqueda semantica.
 

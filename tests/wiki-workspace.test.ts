@@ -9,6 +9,7 @@ import {
   getWikiStatus,
   initializeWiki,
   listWikiDocuments,
+  searchWikiDocuments,
 } from "../src/wiki/index.js";
 
 const tempDirectories: string[] = [];
@@ -166,6 +167,58 @@ Visible content.
     expect(document?.content).toContain("Capture this durable note.");
     expect(document?.content).not.toContain("Different content should not overwrite.");
     expect(document?.tags).toEqual(["memory", "test"]);
+  });
+
+  it("searches wiki documents with metadata filters", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    await writeFile(
+      path.join(config.resolvedWikiPath, "implementation", "implement-search.md"),
+      `---
+id: implementation-search
+title: Search Implementation
+type: implementation
+status: completed
+tags:
+  - cli
+---
+
+# Search Implementation
+
+The librarian can find durable context.
+`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(config.resolvedWikiPath, ".thoth", "ignored-search.md"),
+      `---
+id: ignored-search
+title: Ignored Search
+type: implementation
+status: completed
+tags:
+  - cli
+---
+
+durable context
+`,
+      "utf8",
+    );
+
+    const results = await searchWikiDocuments(config, "durable context");
+    const typeResults = await searchWikiDocuments(config, "durable", {
+      type: "implementation",
+    });
+    const tagResults = await searchWikiDocuments(config, "durable", { tag: "cli" });
+    const noResults = await searchWikiDocuments(config, "durable", { tag: "missing" });
+
+    expect(results.map((result) => result.id)).toEqual(["implementation-search"]);
+    expect(typeResults).toHaveLength(1);
+    expect(tagResults).toHaveLength(1);
+    expect(noResults).toHaveLength(0);
+    expect(results[0]?.snippet).toContain("durable context");
   });
 });
 

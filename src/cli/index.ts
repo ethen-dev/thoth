@@ -8,6 +8,7 @@ import {
   getWikiStatus,
   initializeWiki,
   listWikiDocuments,
+  searchWikiDocuments,
 } from "../wiki/index.js";
 
 const program = new Command();
@@ -152,6 +153,39 @@ program
         console.log(`Document: ${result.id}`);
         console.log(`Path: ${result.path}`);
         console.log(`Status: ${result.created ? "created" : "exists"}`);
+      } catch (error) {
+        reportError(error);
+      }
+    },
+  );
+
+program
+  .command("search")
+  .description("Search wiki documents")
+  .argument("<query>", "Search query")
+  .option("--type <type>", "Filter by document type")
+  .option("--status <status>", "Filter by document status")
+  .option("--tag <tag>", "Filter by tag")
+  .action(
+    async (
+      query: string,
+      options: { type?: string; status?: string; tag?: string },
+    ) => {
+      try {
+        const config = await loadConfig();
+        const results = await searchWikiDocuments(config, query, options);
+
+        if (results.length === 0) {
+          console.log("No wiki documents matched.");
+          return;
+        }
+
+        for (const result of results) {
+          console.log(
+            `${result.id}\t${result.type}\t${result.status}\t${result.title}\t${result.path}`,
+          );
+          console.log(`  ${result.snippet}`);
+        }
       } catch (error) {
         reportError(error);
       }
