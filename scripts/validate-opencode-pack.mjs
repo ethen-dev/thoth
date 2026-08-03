@@ -6,12 +6,22 @@ import process from "node:process";
 
 const root = process.cwd();
 const agentPath = join(root, "opencode", "agents", "thoth-memory.md");
-const thothInstallerPath = join(root, "opencode", "install", "install-thoth.command");
-const agentInstallerPath = join(root, "opencode", "install", "install-opencode-agent.command");
+const autonomousMemoryDocPath = join(root, "docs", "autonomous-memory.md");
+const macThothInstallerPath = join(root, "opencode", "install", "install-thoth.command");
+const macAgentInstallerPath = join(root, "opencode", "install", "install-opencode-agent.command");
+const linuxThothInstallerPath = join(root, "opencode", "install", "install-thoth.sh");
+const linuxAgentInstallerPath = join(root, "opencode", "install", "install-opencode-agent.sh");
+const windowsThothInstallerPath = join(root, "opencode", "install", "install-thoth.ps1");
+const windowsAgentInstallerPath = join(root, "opencode", "install", "install-opencode-agent.ps1");
 const readmePath = join(root, "opencode", "README.md");
 
 const requiredAgentSnippets = [
-  "description: Persistent memory agent",
+  "description: Autonomous memory agent",
+  "Autonomous Memory Policy",
+  "autonomous but transparent",
+  "Automatically preserve",
+  "Use a confidence threshold",
+  "Memoria actualizada",
   "mode: primary",
   "edit: deny",
   "thoth search*",
@@ -23,10 +33,26 @@ const requiredAgentSnippets = [
 const requiredReadmeSnippets = [
   "install-thoth.command",
   "install-opencode-agent.command",
+  "install-thoth.sh",
+  "install-opencode-agent.sh",
+  "install-thoth.ps1",
+  "install-opencode-agent.ps1",
   "~/Documents/Thoth/workspace",
   "~/Documents/Thoth/wiki",
   "thoth doctor",
   "--dry-run",
+  "Autonomous Memory",
+  "autonomous but transparent",
+  "docs/autonomous-memory.md",
+];
+
+const requiredAutonomousMemoryDocSnippets = [
+  "autonomous-transparent",
+  "Save Automatically",
+  "Ask First",
+  "Ignore By Default",
+  "Memory Flow",
+  "Current Implementation Boundary",
 ];
 
 async function assertFile(path) {
@@ -59,30 +85,72 @@ function run(command, args) {
   return `${result.stdout}${result.stderr}`;
 }
 
+function findCommand(commands) {
+  for (const command of commands) {
+    const result = spawnSync(command, ["-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+
+    if (result.status === 0) {
+      return command;
+    }
+  }
+
+  return undefined;
+}
+
 await Promise.all([
   assertFile(agentPath),
-  assertFile(thothInstallerPath),
-  assertFile(agentInstallerPath),
+  assertFile(autonomousMemoryDocPath),
+  assertFile(macThothInstallerPath),
+  assertFile(macAgentInstallerPath),
+  assertFile(linuxThothInstallerPath),
+  assertFile(linuxAgentInstallerPath),
+  assertFile(windowsThothInstallerPath),
+  assertFile(windowsAgentInstallerPath),
   assertFile(readmePath),
-  assertExecutable(thothInstallerPath),
-  assertExecutable(agentInstallerPath),
+  assertExecutable(macThothInstallerPath),
+  assertExecutable(macAgentInstallerPath),
+  assertExecutable(linuxThothInstallerPath),
+  assertExecutable(linuxAgentInstallerPath),
 ]);
 
-const [agent, readme] = await Promise.all([
+const [agent, readme, autonomousMemoryDoc] = await Promise.all([
   readFile(agentPath, "utf8"),
   readFile(readmePath, "utf8"),
+  readFile(autonomousMemoryDocPath, "utf8"),
 ]);
 
 assertIncludes(agent, requiredAgentSnippets, "OpenCode agent");
 assertIncludes(readme, requiredReadmeSnippets, "OpenCode README");
+assertIncludes(autonomousMemoryDoc, requiredAutonomousMemoryDocSnippets, "Autonomous memory doc");
 
-run("zsh", ["-n", thothInstallerPath]);
-run("zsh", ["-n", agentInstallerPath]);
+run("zsh", ["-n", macThothInstallerPath]);
+run("zsh", ["-n", macAgentInstallerPath]);
+run("bash", ["-n", linuxThothInstallerPath]);
+run("bash", ["-n", linuxAgentInstallerPath]);
 
-const thothDryRun = run(thothInstallerPath, ["--dry-run"]);
-const agentDryRun = run(agentInstallerPath, ["--dry-run"]);
+const macThothDryRun = run(macThothInstallerPath, ["--dry-run"]);
+const macAgentDryRun = run(macAgentInstallerPath, ["--dry-run"]);
+const linuxThothDryRun = run(linuxThothInstallerPath, ["--dry-run"]);
+const linuxAgentDryRun = run(linuxAgentInstallerPath, ["--dry-run"]);
 
-assertIncludes(thothDryRun, ["DRY RUN", "thoth init", "thoth doctor"], "T.H.O.T.H. installer dry-run");
-assertIncludes(agentDryRun, ["DRY RUN", "thoth-memory.md"], "OpenCode agent installer dry-run");
+assertIncludes(macThothDryRun, ["DRY RUN", "thoth init", "thoth doctor"], "macOS T.H.O.T.H. installer dry-run");
+assertIncludes(macAgentDryRun, ["DRY RUN", "thoth-memory.md"], "macOS OpenCode agent installer dry-run");
+assertIncludes(linuxThothDryRun, ["DRY RUN", "thoth init", "thoth doctor"], "Linux T.H.O.T.H. installer dry-run");
+assertIncludes(linuxAgentDryRun, ["DRY RUN", "thoth-memory.md"], "Linux OpenCode agent installer dry-run");
+
+const windowsThothInstaller = await readFile(windowsThothInstallerPath, "utf8");
+const windowsAgentInstaller = await readFile(windowsAgentInstallerPath, "utf8");
+
+assertIncludes(windowsThothInstaller, ["param(", "[switch]$DryRun", "npm", "thoth init", "thoth doctor"], "Windows T.H.O.T.H. installer");
+assertIncludes(windowsAgentInstaller, ["param(", "[switch]$DryRun", "thoth-memory.md", "Copy-Item"], "Windows OpenCode agent installer");
+
+const powershell = findCommand(["pwsh", "powershell"]);
+if (powershell) {
+  run(powershell, ["-NoProfile", "-Command", `[scriptblock]::Create((Get-Content -Raw '${windowsThothInstallerPath.replaceAll("'", "''")}')) | Out-Null`]);
+  run(powershell, ["-NoProfile", "-Command", `[scriptblock]::Create((Get-Content -Raw '${windowsAgentInstallerPath.replaceAll("'", "''")}')) | Out-Null`]);
+}
 
 console.log("OpenCode pack validation passed.");
