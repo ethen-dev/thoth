@@ -70,6 +70,23 @@ export type WikiCaptureResult = {
   created: boolean;
 };
 
+export type WikiUpdateInput = {
+  id: string;
+  title?: string;
+  type?: string;
+  status?: string;
+  tags?: string[];
+};
+
+export type WikiUpdateResult = {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  tags: string[];
+  path: string;
+};
+
 export type WikiSearchFilters = WikiListFilters;
 
 export type WikiSearchResult = WikiDocumentSummary & {
@@ -179,21 +196,7 @@ export async function getWikiDocumentById(
   config: ResolvedThothConfig,
   documentId: string,
 ): Promise<WikiDocument | null> {
-  if (!(await pathExists(config.resolvedWikiPath))) {
-    return null;
-  }
-
-  const markdownPaths = await collectMarkdownFiles(config.resolvedWikiPath);
-
-  for (const markdownPath of markdownPaths) {
-    const document = await readWikiDocument(config.resolvedWikiPath, markdownPath);
-
-    if (document.id === documentId) {
-      return document;
-    }
-  }
-
-  return null;
+  return (await findWikiDocumentById(config.resolvedWikiPath, documentId))?.document ?? null;
 }
 
 export async function captureWikiDocument(
@@ -225,6 +228,52 @@ export async function captureWikiDocument(
     status,
     path: relativePath,
     created: result === "created",
+  };
+}
+
+export async function updateWikiDocument(
+  config: ResolvedThothConfig,
+  input: WikiUpdateInput,
+): Promise<WikiUpdateResult> {
+  const located = await findWikiDocumentById(config.resolvedWikiPath, input.id);
+
+  if (!located) {
+    throw new Error(`Document not found: ${input.id}`);
+  }
+
+  const parsed = matter(located.document.raw);
+  const metadata = { ...(parsed.data as Record<string, unknown>) };
+
+  if (input.title) {
+    metadata.title = input.title;
+  }
+
+  if (input.type) {
+    metadata.type = input.type;
+  }
+
+  if (input.status) {
+    metadata.status = input.status;
+  }
+
+  if (input.tags && input.tags.length > 0) {
+    metadata.tags = mergeTags(readStringArray(metadata.tags), input.tags);
+  }
+
+  normalizeDateMetadata(metadata);
+  metadata.updated_at = currentDate();
+
+  await writeFile(located.path, matter.stringify(parsed.content, metadata), "utf8");
+
+  const updatedDocument = await readWikiDocument(config.resolvedWikiPath, located.path);
+
+  return {
+    id: updatedDocument.id,
+    title: updatedDocument.title,
+    type: updatedDocument.type,
+    status: updatedDocument.status,
+    tags: updatedDocument.tags,
+    path: updatedDocument.path,
   };
 }
 
@@ -427,6 +476,27 @@ async function readWikiDocument(
   };
 }
 
+async function findWikiDocumentById(
+  wikiPath: string,
+  documentId: string,
+): Promise<{ path: string; document: WikiDocument } | null> {
+  if (!(await pathExists(wikiPath))) {
+    return null;
+  }
+
+  const markdownPaths = await collectMarkdownFiles(wikiPath);
+
+  for (const markdownPath of markdownPaths) {
+    const document = await readWikiDocument(wikiPath, markdownPath);
+
+    if (document.id === documentId) {
+      return { path: markdownPath, document };
+    }
+  }
+
+  return null;
+}
+
 async function collectMarkdownFiles(directoryPath: string): Promise<string[]> {
   const entries = await readdir(directoryPath, { withFileTypes: true });
   const files: string[] = [];
@@ -519,6 +589,20 @@ function readStringArray(value: unknown): string[] {
   }
 
   return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+function mergeTags(existingTags: string[], newTags: string[]): string[] {
+  return Array.from(new Set([...existingTags, ...newTags]));
+}
+
+function normalizeDateMetadata(metadata: Record<string, unknown>): void {
+  for (const field of ["created_at", "updated_at"]) {
+    const value = metadata[field];
+
+    if (value instanceof Date) {
+      metadata[field] = value.toISOString().slice(0, 10);
+    }
+  }
 }
 
 function createWikiDocumentMarkdown(input: {

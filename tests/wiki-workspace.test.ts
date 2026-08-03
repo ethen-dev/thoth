@@ -12,6 +12,7 @@ import {
   lintWikiDocuments,
   rebuildWikiIndex,
   searchWikiDocuments,
+  updateWikiDocument,
 } from "../src/wiki/index.js";
 
 const tempDirectories: string[] = [];
@@ -169,6 +170,40 @@ Visible content.
     expect(document?.content).toContain("Capture this durable note.");
     expect(document?.content).not.toContain("Different content should not overwrite.");
     expect(document?.tags).toEqual(["memory", "test"]);
+  });
+
+  it("updates document metadata without changing content", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    const captured = await captureWikiDocument(config, {
+      content: "Keep this body intact.",
+      title: "Original Title",
+      type: "note",
+      tags: ["original"],
+    });
+
+    const result = await updateWikiDocument(config, {
+      id: captured.id,
+      title: "Updated Title",
+      status: "review",
+      tags: ["original", "updated"],
+    });
+    const document = await getWikiDocumentById(config, captured.id);
+    const raw = await readFile(
+      path.join(config.resolvedWikiPath, captured.path),
+      "utf8",
+    );
+
+    expect(result.title).toBe("Updated Title");
+    expect(result.status).toBe("review");
+    expect(result.tags).toEqual(["original", "updated"]);
+    expect(document?.content).toContain("Keep this body intact.");
+    expect(document?.metadata.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(raw).toContain("created_at: '20");
+    expect(raw).not.toContain("created_at: 20");
+    expect(raw).not.toContain("T00:00:00.000Z");
   });
 
   it("searches wiki documents with metadata filters", async () => {

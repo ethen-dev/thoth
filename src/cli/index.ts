@@ -11,6 +11,7 @@ import {
   lintWikiDocuments,
   rebuildWikiIndex,
   searchWikiDocuments,
+  updateWikiDocument,
 } from "../wiki/index.js";
 
 const program = new Command();
@@ -245,6 +246,46 @@ program
       reportError(error);
     }
   });
+
+program
+  .command("update")
+  .description("Update wiki document metadata")
+  .argument("<id>", "Document id")
+  .option("--title <title>", "Document title")
+  .option("--type <type>", "Document type")
+  .option("--status <status>", "Document status")
+  .option("--tag <tag>", "Tag to append. Can be used multiple times", collectValues, [])
+  .action(
+    async (
+      id: string,
+      options: {
+        title?: string;
+        type?: string;
+        status?: string;
+        tag?: string[];
+      },
+    ) => {
+      try {
+        const config = await loadConfig();
+        const result = await updateWikiDocument(config, {
+          id,
+          title: options.title,
+          type: options.type,
+          status: options.status,
+          tags: options.tag,
+        });
+
+        console.log(`Document: ${result.id}`);
+        console.log(`Path: ${result.path}`);
+        console.log(`Title: ${result.title}`);
+        console.log(`Type: ${result.type}`);
+        console.log(`Status: ${result.status}`);
+        console.log(`Tags: ${result.tags.length > 0 ? result.tags.join(", ") : "none"}`);
+      } catch (error) {
+        reportError(error);
+      }
+    },
+  );
 
 program.parse();
 

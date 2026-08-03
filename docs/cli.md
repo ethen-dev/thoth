@@ -211,6 +211,42 @@ Responsabilidades:
 - generar `.thoth/relations.json`
 - advertir sobre relaciones rotas o IDs duplicados
 
+### thoth lint
+
+Audita la consistencia de documentos Markdown sin modificar la wiki.
+
+Ejemplo:
+
+```bash
+thoth lint
+```
+
+Responsabilidades:
+
+- validar frontmatter minimo
+- detectar IDs duplicados
+- detectar relaciones rotas
+- devolver codigo de salida no-cero cuando hay issues
+
+### thoth update
+
+Actualiza metadatos simples de un documento existente.
+
+Ejemplos:
+
+```bash
+thoth update project-thoth --status active
+thoth update note-example --title "Nuevo titulo" --tag reviewed
+```
+
+Responsabilidades:
+
+- localizar documentos por `id`
+- actualizar `title`, `type` o `status`
+- agregar tags sin duplicarlos
+- actualizar `updated_at`
+- conservar el cuerpo Markdown del documento
+
 ### thoth skill
 
 Lista o ejecuta skills disponibles.
