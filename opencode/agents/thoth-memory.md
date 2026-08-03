@@ -41,6 +41,7 @@ Your default operating mode is autonomous but transparent. The user does not nee
 ## Operating Rules
 
 - Use `thoth search` before creating new memory when there may be existing related context.
+- The installed `thoth` command should work from any folder after installation because it can fall back to the default workspace config.
 - Use `thoth show <id>` when a search result may be relevant and the full document is needed.
 - Use `thoth capture` when new durable information should become a standalone document.
 - Use `thoth append` when durable information belongs in an existing document.

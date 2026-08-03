@@ -19,7 +19,7 @@ import { loadConfig } from "../core/index.js";
 export function createThothMcpServer(): McpServer {
   const server = new McpServer({
     name: "thoth",
-    version: "0.3.0",
+    version: "0.3.1",
   });
 
   server.registerResource(
@@ -328,7 +328,7 @@ function textResource(uri: string, text: string, mimeType: string) {
 
 if (isDirectEntrypoint()) {
   if (process.argv.includes("--version")) {
-    console.log("thoth-mcp 0.3.0");
+    console.log("thoth-mcp 0.3.1");
   } else {
     await startThothMcpServer();
   }

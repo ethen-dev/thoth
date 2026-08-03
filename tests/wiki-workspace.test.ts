@@ -19,8 +19,17 @@ import {
 } from "../src/wiki/index.js";
 
 const tempDirectories: string[] = [];
+const originalCwd = process.cwd();
+const originalThothConfig = process.env.THOTH_CONFIG;
 
 afterEach(async () => {
+  process.chdir(originalCwd);
+  if (originalThothConfig === undefined) {
+    delete process.env.THOTH_CONFIG;
+  } else {
+    process.env.THOTH_CONFIG = originalThothConfig;
+  }
+
   await Promise.all(
     tempDirectories.splice(0).map((directory) =>
       rm(directory, { recursive: true, force: true }),
@@ -37,6 +46,21 @@ describe("wiki workspace", () => {
     expect(config.resolvedWikiPath).toBe(
       path.resolve(workspacePath, "../wiki"),
     );
+  });
+
+  it("loads config from THOTH_CONFIG outside the workspace", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const otherPath = await mkdtemp(path.join(os.tmpdir(), "thoth-other-"));
+    tempDirectories.push(otherPath);
+
+    process.env.THOTH_CONFIG = path.join(workspacePath, "thoth.config.json");
+    process.chdir(otherPath);
+
+    const config = await loadConfig();
+
+    expect(config.workspacePath).toBe(workspacePath);
+    expect(config.configPath).toBe(path.join(workspacePath, "thoth.config.json"));
+    expect(config.resolvedWikiPath).toBe(path.resolve(workspacePath, "../wiki"));
   });
 
   it("initializes the configured wiki without overwriting an existing index", async () => {

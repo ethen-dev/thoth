@@ -17,7 +17,7 @@ import {
 } from "../actions/index.js";
 import { loadConfig } from "../core/index.js";
 
-const thothVersion = "0.3.0";
+const thothVersion = "0.3.1";
 const program = new Command();
 
 program

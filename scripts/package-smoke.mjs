@@ -40,6 +40,9 @@ try {
     "smoke",
   ], workspacePath);
   await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "search", "smoke"], workspacePath);
+  await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "search", "smoke"], tempRoot, {
+    THOTH_CONFIG: path.join(workspacePath, "thoth.config.json"),
+  });
   await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "doctor"], workspacePath);
 
   await rm(tarballPath, { force: true });
@@ -48,9 +51,10 @@ try {
   await rm(tempRoot, { recursive: true, force: true });
 }
 
-async function run(command, args, cwd) {
+async function run(command, args, cwd, env = {}) {
   return execFileAsync(command, args, {
     cwd,
+    env: { ...process.env, ...env },
     maxBuffer: 1024 * 1024 * 10,
   });
 }

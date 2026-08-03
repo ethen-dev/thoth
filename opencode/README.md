@@ -79,6 +79,8 @@ Use the thoth-memory agent and diagnose my T.H.O.T.H. setup.
 
 Select or mention the `thoth-memory` agent, then speak naturally:
 
+You can open OpenCode from any project folder. The installed `thoth` command first looks for a local `thoth.config.json`, then `THOTH_CONFIG`, then the default installed workspace at `~/Documents/Thoth/workspace/thoth.config.json`.
+
 ```text
 Remember that my garden project uses raised beds and drip irrigation.
 ```

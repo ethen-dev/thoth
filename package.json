@@ -1,6 +1,6 @@
 {
   "name": "thoth",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "T.H.O.T.H. - Transversal Heuristic Organizer of Trusted History",
   "type": "module",
   "bin": {
