@@ -1,4 +1,6 @@
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import matter from "gray-matter";
 import type { ResolvedThothConfig } from "../core/config.js";
 import { ensureDirectory, pathExists, writeFileIfMissing } from "../storage/index.js";
 
@@ -25,6 +27,21 @@ export type WikiStatus = {
 export type WikiInitResult = WikiStatus & {
   createdDirectories: string[];
   index: "created" | "exists";
+};
+
+export type WikiDocumentSummary = {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  tags: string[];
+  path: string;
+};
+
+export type WikiListFilters = {
+  type?: string;
+  status?: string;
+  tag?: string;
 };
 
 export async function getWikiStatus(
@@ -78,6 +95,95 @@ export async function initializeWiki(
     createdDirectories,
     index,
   };
+}
+
+export async function listWikiDocuments(
+  config: ResolvedThothConfig,
+  filters: WikiListFilters = {},
+): Promise<WikiDocumentSummary[]> {
+  if (!(await pathExists(config.resolvedWikiPath))) {
+    return [];
+  }
+
+  const markdownPaths = await collectMarkdownFiles(config.resolvedWikiPath);
+  const documents: WikiDocumentSummary[] = [];
+
+  for (const markdownPath of markdownPaths) {
+    const raw = await readFile(markdownPath, "utf8");
+    const parsed = matter(raw);
+    const data = parsed.data as Record<string, unknown>;
+    const relativePath = path.relative(config.resolvedWikiPath, markdownPath);
+
+    const document: WikiDocumentSummary = {
+      id: readString(data.id, relativePath),
+      title: readString(data.title, path.basename(markdownPath, ".md")),
+      type: readString(data.type, "unknown"),
+      status: readString(data.status, "unknown"),
+      tags: readStringArray(data.tags),
+      path: relativePath,
+    };
+
+    if (matchesFilters(document, filters)) {
+      documents.push(document);
+    }
+  }
+
+  return documents.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+async function collectMarkdownFiles(directoryPath: string): Promise<string[]> {
+  const entries = await readdir(directoryPath, { withFileTypes: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    if (entry.name === ".thoth") {
+      continue;
+    }
+
+    const entryPath = path.join(directoryPath, entry.name);
+
+    if (entry.isDirectory()) {
+      files.push(...(await collectMarkdownFiles(entryPath)));
+      continue;
+    }
+
+    if (entry.isFile() && entry.name.endsWith(".md")) {
+      files.push(entryPath);
+    }
+  }
+
+  return files;
+}
+
+function matchesFilters(
+  document: WikiDocumentSummary,
+  filters: WikiListFilters,
+): boolean {
+  if (filters.type && document.type !== filters.type) {
+    return false;
+  }
+
+  if (filters.status && document.status !== filters.status) {
+    return false;
+  }
+
+  if (filters.tag && !document.tags.includes(filters.tag)) {
+    return false;
+  }
+
+  return true;
+}
+
+function readString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is string => typeof entry === "string");
 }
 
 function createWikiIndex(): string {

@@ -2,7 +2,7 @@
 
 import { Command } from "commander";
 import { loadConfig } from "../core/index.js";
-import { getWikiStatus, initializeWiki } from "../wiki/index.js";
+import { getWikiStatus, initializeWiki, listWikiDocuments } from "../wiki/index.js";
 
 const program = new Command();
 
@@ -48,6 +48,32 @@ program
             : "none"
         }`,
       );
+    } catch (error) {
+      reportError(error);
+    }
+  });
+
+program
+  .command("list")
+  .description("List wiki documents")
+  .option("--type <type>", "Filter by document type")
+  .option("--status <status>", "Filter by document status")
+  .option("--tag <tag>", "Filter by tag")
+  .action(async (options: { type?: string; status?: string; tag?: string }) => {
+    try {
+      const config = await loadConfig();
+      const documents = await listWikiDocuments(config, options);
+
+      if (documents.length === 0) {
+        console.log("No wiki documents found.");
+        return;
+      }
+
+      for (const document of documents) {
+        console.log(
+          `${document.id}\t${document.type}\t${document.status}\t${document.title}\t${document.path}`,
+        );
+      }
     } catch (error) {
       reportError(error);
     }

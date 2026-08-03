@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/core/index.js";
-import { getWikiStatus, initializeWiki } from "../src/wiki/index.js";
+import { getWikiStatus, initializeWiki, listWikiDocuments } from "../src/wiki/index.js";
 
 const tempDirectories: string[] = [];
 
@@ -52,6 +52,50 @@ describe("wiki workspace", () => {
     expect(status.wikiExists).toBe(false);
     expect(status.indexExists).toBe(false);
     expect(status.missingDirectories).toContain("projects");
+  });
+
+  it("lists markdown documents and applies metadata filters", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    await writeFile(
+      path.join(config.resolvedWikiPath, "decisions", "decision-example.md"),
+      `---
+id: decision-example
+title: Example Decision
+type: decision
+status: active
+tags:
+  - architecture
+---
+
+# Example Decision
+`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(config.resolvedWikiPath, ".thoth", "ignored.md"),
+      `---
+id: ignored
+title: Ignored
+type: note
+status: active
+---
+`,
+      "utf8",
+    );
+
+    const documents = await listWikiDocuments(config);
+    const decisionDocuments = await listWikiDocuments(config, { type: "decision" });
+    const tagDocuments = await listWikiDocuments(config, { tag: "architecture" });
+
+    expect(documents.map((document) => document.id)).toContain("decision-example");
+    expect(documents.map((document) => document.id)).not.toContain("ignored");
+    expect(decisionDocuments).toHaveLength(1);
+    expect(decisionDocuments[0]?.id).toBe("decision-example");
+    expect(tagDocuments).toHaveLength(1);
+    expect(tagDocuments[0]?.id).toBe("decision-example");
   });
 });
 
