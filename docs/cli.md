@@ -247,6 +247,24 @@ Responsabilidades:
 - actualizar `updated_at`
 - conservar el cuerpo Markdown del documento
 
+### thoth append
+
+Agrega contenido a una seccion de un documento existente.
+
+Ejemplo:
+
+```bash
+thoth append project-thoth "Nueva observacion" --section Notes
+```
+
+Responsabilidades:
+
+- localizar documentos por `id`
+- agregar contenido a una seccion existente
+- crear la seccion si no existe
+- actualizar `updated_at`
+- preservar frontmatter y cuerpo existente
+
 ### thoth relate
 
 Crea una relacion explicita entre dos documentos existentes.

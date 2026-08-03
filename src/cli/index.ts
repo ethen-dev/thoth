@@ -2,6 +2,7 @@
 
 import { Command } from "commander";
 import {
+  appendWikiDocument,
   captureWikiDocument,
   getWikiDocumentById,
   getWikiStatus,
@@ -159,6 +160,35 @@ program
         console.log(`Document: ${result.id}`);
         console.log(`Path: ${result.path}`);
         console.log(`Status: ${result.created ? "created" : "exists"}`);
+      } catch (error) {
+        reportError(error);
+      }
+    },
+  );
+
+program
+  .command("append")
+  .description("Append content to a wiki document section")
+  .argument("<id>", "Document id")
+  .argument("<content>", "Content to append")
+  .option("--section <section>", "Section heading", "Notes")
+  .action(
+    async (
+      id: string,
+      content: string,
+      options: { section: string },
+    ) => {
+      try {
+        const config = await loadConfig();
+        const result = await appendWikiDocument(config, {
+          id,
+          content,
+          section: options.section,
+        });
+
+        console.log(`Document: ${result.id}`);
+        console.log(`Path: ${result.path}`);
+        console.log(`Section: ${result.section}`);
       } catch (error) {
         reportError(error);
       }

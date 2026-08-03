@@ -1,4 +1,5 @@
 export {
+  appendWikiDocument,
   captureWikiDocument,
   getWikiDocumentById,
   getWikiStatus,
@@ -13,6 +14,8 @@ export {
 } from "../wiki/index.js";
 
 export type {
+  WikiAppendInput,
+  WikiAppendResult,
   WikiCaptureInput,
   WikiCaptureResult,
   WikiDocument,

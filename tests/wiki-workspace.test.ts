@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/core/index.js";
 import {
+  appendWikiDocument,
   captureWikiDocument,
   getWikiDocumentById,
   getWikiStatus,
@@ -206,6 +207,30 @@ Visible content.
     expect(raw).toContain("created_at: '20");
     expect(raw).not.toContain("created_at: 20");
     expect(raw).not.toContain("T00:00:00.000Z");
+  });
+
+  it("appends content to an existing document section", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    const captured = await captureWikiDocument(config, {
+      content: "Original body.",
+      title: "Append Target",
+      type: "note",
+    });
+
+    const result = await appendWikiDocument(config, {
+      id: captured.id,
+      section: "Notes",
+      content: "Appended note.",
+    });
+    const document = await getWikiDocumentById(config, captured.id);
+
+    expect(result.section).toBe("Notes");
+    expect(document?.content).toContain("Original body.");
+    expect(document?.content).toContain("## Notes\n\nAppended note.");
+    expect(document?.metadata.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it("relates existing documents without duplicating relations", async () => {

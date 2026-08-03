@@ -90,6 +90,18 @@ export type WikiUpdateResult = {
   path: string;
 };
 
+export type WikiAppendInput = {
+  id: string;
+  content: string;
+  section?: string;
+};
+
+export type WikiAppendResult = {
+  id: string;
+  path: string;
+  section: string;
+};
+
 export type WikiRelateInput = {
   sourceId: string;
   targetId: string;
@@ -302,6 +314,33 @@ export async function updateWikiDocument(
     status: updatedDocument.status,
     tags: updatedDocument.tags,
     path: updatedDocument.path,
+  };
+}
+
+export async function appendWikiDocument(
+  config: ResolvedThothConfig,
+  input: WikiAppendInput,
+): Promise<WikiAppendResult> {
+  const located = await findWikiDocumentById(config.resolvedWikiPath, input.id);
+
+  if (!located) {
+    throw new Error(`Document not found: ${input.id}`);
+  }
+
+  const parsed = matter(located.document.raw);
+  const metadata = { ...(parsed.data as Record<string, unknown>) };
+  const section = input.section ?? "Notes";
+  const content = appendToSection(parsed.content, section, input.content);
+
+  normalizeDateMetadata(metadata);
+  metadata.updated_at = currentDate();
+
+  await writeFile(located.path, matter.stringify(content, metadata), "utf8");
+
+  return {
+    id: input.id,
+    path: located.document.path,
+    section,
   };
 }
 
@@ -701,6 +740,29 @@ function normalizeSchemaValue(value: unknown): unknown {
   }
 
   return value;
+}
+
+function appendToSection(content: string, section: string, addition: string): string {
+  const normalizedAddition = addition.trim();
+  const escapedSection = escapeRegExp(section);
+  const heading = new RegExp(`(^|\\n)## ${escapedSection}\\s*\\n`, "m");
+  const match = heading.exec(content);
+
+  if (!match || match.index === undefined) {
+    return `${content.trimEnd()}\n\n## ${section}\n\n${normalizedAddition}\n`;
+  }
+
+  const sectionStart = match.index + match[0].length;
+  const nextHeading = content.slice(sectionStart).search(/\n## /);
+  const insertAt = nextHeading === -1
+    ? content.length
+    : sectionStart + nextHeading;
+
+  return `${content.slice(0, insertAt).trimEnd()}\n\n${normalizedAddition}\n${content.slice(insertAt)}`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function readWikiDocument(
