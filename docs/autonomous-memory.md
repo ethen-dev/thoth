@@ -53,8 +53,23 @@ Do not save:
 2. Identify memory candidates.
 3. Search for related context.
 4. Capture, append, update, or relate using `thoth` commands.
-5. Run `thoth lint` or `thoth doctor` after substantial write sessions.
-6. Report the memory action in one short note.
+5. Run `thoth index` after writes.
+6. Run `thoth lint` or `thoth doctor` after substantial write sessions.
+7. Report the memory action in one short note.
+
+## Agentic Project Intake
+
+When a user asks T.H.O.T.H. to study and memorize an existing project, the OpenCode pack uses a role-based flow:
+
+- `thoth-memory` orchestrates the session and decides what should become durable memory.
+- `thoth-archivist` reads project documentation and extracts facts.
+- `thoth-indexer` maps existing memory, duplicate topics, IDs, and relations.
+- `thoth-scribe` writes approved memory using `thoth` commands.
+- `thoth-critic` reviews privacy, ambiguity, duplication, and structure.
+
+Safe read-only inspection should not require repeated confirmation. Memory writes and relation changes remain confirmed operations.
+
+Every project intake that writes memory should also create or append a session log in `logs/`, then run `thoth index`. The final receipt should state whether logging and indexing happened.
 
 ## Receipt Format
 
@@ -70,6 +85,12 @@ When a relation was added:
 Memoria actualizada: relacioné <source-id> con <target-id> como <relation>.
 ```
 
+For project intake, include log and index status:
+
+```text
+Memoria actualizada: guardé <count> documentos, actualicé el log <log-id> y regeneré el índice.
+```
+
 If memory was not written because confirmation is needed:
 
 ```text
@@ -78,4 +99,4 @@ Esto parece memoria durable, pero necesito confirmación antes de guardarlo porq
 
 ## Current Implementation Boundary
 
-This policy is implemented first in the OpenCode agent instructions. It does not require a background daemon. The `thoth` CLI remains the execution surface for all memory writes.
+This policy is implemented first in the OpenCode agent instructions and subagent pack. It does not require a background daemon. The `thoth` CLI remains the execution surface for all memory writes.

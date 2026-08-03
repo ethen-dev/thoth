@@ -48,9 +48,13 @@ The first installer creates:
 
 It also installs dependencies, builds T.H.O.T.H., and installs the `thoth` command globally from the local repository.
 
-The second installer copies the OpenCode agent to:
+The second installer copies the OpenCode agents to:
 
 - `~/.config/opencode/agents/thoth-memory.md`
+- `~/.config/opencode/agents/thoth-archivist.md`
+- `~/.config/opencode/agents/thoth-indexer.md`
+- `~/.config/opencode/agents/thoth-scribe.md`
+- `~/.config/opencode/agents/thoth-critic.md`
 
 On Windows, the default memory folder is `Documents\Thoth`, and the agent is copied to `.config\opencode\agents` under your user profile.
 
@@ -110,6 +114,25 @@ Let's use Linux and Windows installers too, not only macOS.
 ```
 
 The agent should answer the request and preserve the durable project decision without needing a separate save command.
+
+## Project Study Flow
+
+For larger projects, ask:
+
+```text
+Use the thoth-memory agent. Study and memorize this project.
+```
+
+The primary agent should orchestrate the specialist agents:
+
+- `thoth-archivist` reads documentation and extracts durable facts
+- `thoth-indexer` maps existing memory, IDs, duplicates, and relations
+- `thoth-scribe` writes approved memory with `thoth` commands
+- `thoth-critic` reviews privacy, duplication, ambiguity, and structure
+
+Read-only project inspection is allowed to reduce permission prompts. Memory writes still ask for confirmation.
+
+After a project study session that writes memory, the agent should also create or update a session log and run `thoth index`. Its final response should mention saved documents, log status, index status, and unresolved questions.
 
 ## Where Your Memory Lives
 

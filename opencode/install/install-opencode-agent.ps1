@@ -10,26 +10,25 @@ function Say($Message) {
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoDir = Resolve-Path (Join-Path $ScriptDir "..\..")
-$SourceAgent = Join-Path $RepoDir "opencode\agents\thoth-memory.md"
+$SourceDir = Join-Path $RepoDir "opencode\agents"
 $DefaultTargetDir = Join-Path $HOME ".config\opencode\agents"
 $TargetDir = if ($env:OPENCODE_AGENTS_DIR) { $env:OPENCODE_AGENTS_DIR } else { $DefaultTargetDir }
-$TargetAgent = Join-Path $TargetDir "thoth-memory.md"
 
 Say "T.H.O.T.H. OpenCode agent installer"
-Say "Agent source: $SourceAgent"
-Say "Agent target: $TargetAgent"
+Say "Agent source: $SourceDir"
+Say "Agent target: $TargetDir"
 
-if (-not (Test-Path $SourceAgent)) {
-  Say "Cannot find thoth-memory agent at $SourceAgent"
+if (-not (Test-Path $SourceDir)) {
+  Say "Cannot find OpenCode agents at $SourceDir"
   exit 1
 }
 
 if ($DryRun) {
   Say "DRY RUN: New-Item -ItemType Directory -Force $TargetDir"
-  Say "DRY RUN: Copy-Item $SourceAgent $TargetAgent"
+  Say "DRY RUN: Copy-Item $SourceDir\*.md $TargetDir"
 } else {
   New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
-  Copy-Item -Path $SourceAgent -Destination $TargetAgent -Force
+  Copy-Item -Path (Join-Path $SourceDir "*.md") -Destination $TargetDir -Force
 }
 
 Say "OpenCode agent installation finished."

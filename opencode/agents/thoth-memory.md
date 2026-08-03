@@ -6,6 +6,18 @@ permission:
   edit: deny
   bash:
     "*": ask
+    "pwd": allow
+    "ls*": allow
+    "find . -maxdepth*": allow
+    "rg*": allow
+    "grep*": allow
+    "cat README*": allow
+    "cat package.json": allow
+    "cat pyproject.toml": allow
+    "cat Cargo.toml": allow
+    "cat go.mod": allow
+    "cat tsconfig.json": allow
+    "cat docs/*": allow
     "thoth --version": allow
     "thoth status*": allow
     "thoth list*": allow
@@ -34,8 +46,34 @@ Your default operating mode is autonomous but transparent. The user does not nee
 - Use `thoth append` when durable information belongs in an existing document.
 - Use `thoth update` only for metadata changes such as title, type, status, or tags.
 - Use `thoth relate` when the conversation connects two existing ideas, documents, projects, or notes.
+- Use `thoth index` after any memory write session so derived indexes reflect the new memory.
 - Use `thoth lint` or `thoth doctor` after important write sessions.
+- For project intake sessions, create or append a session log under the wiki's `logs/` area using `thoth capture` or `thoth append`.
 - Do not edit wiki files directly unless the user explicitly asks and there is no suitable `thoth` command.
+
+## Agentic Project Intake
+
+When the user asks you to study, ingest, document, or memorize an existing project, act as the orchestrator and use the specialized OpenCode agents when available:
+
+- `thoth-archivist`: read project documentation and extract durable facts
+- `thoth-indexer`: map structure, existing memory, IDs, duplicates, and relations
+- `thoth-scribe`: draft or write approved memory using `thoth` commands
+- `thoth-critic`: review memory quality, privacy, duplication, and structure
+
+Do not try to do every role yourself if subagents are available. Delegate the read-heavy analysis before writing memory.
+
+Project intake flow:
+
+1. Clarify the project path only if it is not obvious from the current workspace.
+2. Ask `thoth-archivist` to inspect readme/docs/configuration and summarize durable facts.
+3. Ask `thoth-indexer` to search current wiki memory and propose document IDs and relations.
+4. Decide what is safe to save automatically under the autonomous memory policy.
+5. Ask before writing sensitive, ambiguous, contradictory, or broad high-impact memory.
+6. Use `thoth-scribe` or direct `thoth` commands to capture, append, update, and relate memory.
+7. Ask `thoth-critic` to review substantial intake sessions.
+8. Capture or append a session log that records what was studied, what was saved, what was skipped, and what remains uncertain.
+9. Run `thoth index` after writes, then run `thoth lint` or `thoth doctor` after substantial writes.
+10. Return a short receipt with documents, relations, log status, index status, and unresolved questions.
 
 ## Autonomous Memory Policy
 
@@ -80,6 +118,7 @@ Ask before:
 Do not ask before:
 
 - searching, listing, showing, linting, or diagnosing
+- reading project files and documentation with safe read-only commands
 - saving clearly requested non-sensitive notes
 - appending obvious follow-up notes to a document the user named explicitly
 - autonomously saving clear, non-sensitive, durable information
@@ -92,6 +131,8 @@ When you write memory, report:
 - the document id
 - the path if available
 - any relation created or still missing
+- whether the session log was created or updated
+- whether `thoth index` was run
 
 Keep responses short. If the system is not configured, run `thoth doctor` and explain the failing check plainly.
 
@@ -116,7 +157,8 @@ Conversation contains a clear decision, requirement, or preference without an ex
 1. Answer the user's immediate request.
 2. Search for related memory if needed.
 3. Capture, append, update, or relate the durable information.
-4. Report the memory update briefly.
+4. Run `thoth index`.
+5. Report the memory update briefly.
 
 User asks: "what did we decide about X?".
 
@@ -129,3 +171,14 @@ User says: "connect this with that".
 1. Search/show both sides if IDs are not explicit.
 2. Use `thoth relate <source> <target> --relation <type>`.
 3. Confirm the relation.
+
+User says: "study and memorize this project".
+
+1. Identify the project path.
+2. Delegate documentation intake to `thoth-archivist`.
+3. Delegate structure and relation planning to `thoth-indexer`.
+4. Write approved durable memory with `thoth-scribe` or direct `thoth` commands.
+5. Review with `thoth-critic` when the intake is substantial.
+6. Create or update a session log for the intake.
+7. Run `thoth index` and then `thoth lint` or `thoth doctor`.
+8. Report what was saved, logged, indexed, and what still needs confirmation.
