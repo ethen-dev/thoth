@@ -1,5 +1,8 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { Ajv2020 } from "ajv/dist/2020.js";
+import type { AnySchema, ErrorObject, ValidateFunction } from "ajv";
 import matter from "gray-matter";
 import type { ResolvedThothConfig } from "../core/config.js";
 import { ensureDirectory, pathExists, writeFileIfMissing } from "../storage/index.js";
@@ -466,10 +469,17 @@ export async function lintWikiDocuments(
   const documents: WikiDocument[] = [];
   const issues: WikiLintIssue[] = [];
   const ids = new Map<string, string[]>();
+  const schemas = await loadWikiSchemas(config.workspacePath);
 
   for (const markdownPath of markdownPaths) {
     const document = await readWikiDocument(config.resolvedWikiPath, markdownPath);
     documents.push(document);
+
+    const valid = schemas.document(normalizeSchemaValue(document.metadata));
+
+    if (!valid) {
+      issues.push(...schemaIssues(document.path, schemas.document.errors));
+    }
 
     for (const field of ["id", "title", "type", "status"]) {
       if (!hasStringMetadata(document.metadata, field)) {
@@ -510,6 +520,17 @@ export async function lintWikiDocuments(
       }
     }
   }
+
+  issues.push(...(await lintDerivedIndexFile(
+    config.resolvedWikiPath,
+    path.join(".thoth", "index.json"),
+    schemas.index,
+  )));
+  issues.push(...(await lintDerivedIndexFile(
+    config.resolvedWikiPath,
+    path.join(".thoth", "relations.json"),
+    schemas.relationsIndex,
+  )));
 
   return {
     documentsChecked: documents.length,
@@ -586,6 +607,100 @@ export async function runWikiDoctor(
     ok: checks.every((check) => check.status === "pass"),
     checks,
   };
+}
+
+type WikiSchemaValidators = {
+  document: ValidateFunction;
+  index: ValidateFunction;
+  relationsIndex: ValidateFunction;
+};
+
+async function loadWikiSchemas(workspacePath: string): Promise<WikiSchemaValidators> {
+  const ajv = new Ajv2020({ allErrors: true });
+  const schemasPath = await resolveSchemasPath(workspacePath);
+  const relationSchema = await readJsonFile(path.join(schemasPath, "wiki-relation.schema.json")) as AnySchema;
+  const documentSchema = await readJsonFile(path.join(schemasPath, "wiki-document.schema.json")) as AnySchema;
+  const indexSchema = await readJsonFile(path.join(schemasPath, "wiki-index.schema.json")) as AnySchema;
+  const relationsIndexSchema = await readJsonFile(
+    path.join(schemasPath, "wiki-relations-index.schema.json"),
+  ) as AnySchema;
+
+  ajv.addSchema(relationSchema, "wiki-relation.schema.json");
+
+  return {
+    document: ajv.compile(documentSchema),
+    index: ajv.compile(indexSchema),
+    relationsIndex: ajv.compile(relationsIndexSchema),
+  };
+}
+
+async function lintDerivedIndexFile(
+  wikiPath: string,
+  relativePath: string,
+  validate: ValidateFunction,
+): Promise<WikiLintIssue[]> {
+  const filePath = path.join(wikiPath, relativePath);
+
+  if (!(await pathExists(filePath))) {
+    return [];
+  }
+
+  try {
+    const value = await readJsonFile(filePath);
+    const valid = validate(value);
+
+    return valid ? [] : schemaIssues(relativePath, validate.errors);
+  } catch (error) {
+    return [{
+      path: relativePath,
+      message: `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    }];
+  }
+}
+
+async function resolveSchemasPath(workspacePath: string): Promise<string> {
+  const candidates = [
+    path.join(workspacePath, "schemas"),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../schemas"),
+    path.join(process.cwd(), "schemas"),
+  ];
+
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0] ?? "schemas";
+}
+
+async function readJsonFile(filePath: string): Promise<unknown> {
+  return JSON.parse(await readFile(filePath, "utf8"));
+}
+
+function schemaIssues(pathName: string, errors: ErrorObject[] | null | undefined): WikiLintIssue[] {
+  return (errors ?? []).map((error) => ({
+    path: pathName,
+    message: `Schema violation${error.instancePath}: ${error.message ?? "invalid value"}`,
+  }));
+}
+
+function normalizeSchemaValue(value: unknown): unknown {
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(normalizeSchemaValue);
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, normalizeSchemaValue(entry)]),
+    );
+  }
+
+  return value;
 }
 
 async function readWikiDocument(
