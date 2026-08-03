@@ -41,6 +41,14 @@ describe("MCP server", () => {
       const resourceTemplates = await client.listResourceTemplates();
       const indexResource = await client.readResource({ uri: "thoth://wiki/index" });
       const projectResource = await client.readResource({ uri: "thoth://document/wiki-index" });
+      const prompts = await client.listPrompts();
+      const prompt = await client.getPrompt({
+        name: "capture_memory",
+        arguments: {
+          content: "Remember this test fact.",
+          intent: "test capture",
+        },
+      });
       const lintResult = await client.callTool({ name: "wiki_lint", arguments: {} });
 
       expect(tools.tools.map((tool) => tool.name)).toEqual(
@@ -60,6 +68,11 @@ describe("MCP server", () => {
         .toContain("thoth://document/{id}");
       expect(indexResource.contents[0]).toMatchObject({ mimeType: "text/markdown" });
       expect(projectResource.contents[0]).toMatchObject({ mimeType: "text/markdown" });
+      expect(prompts.prompts.map((entry) => entry.name)).toContain("capture_memory");
+      expect(prompt.messages[0]?.content).toMatchObject({
+        type: "text",
+        text: expect.stringContaining("wiki_capture"),
+      });
       expect(JSON.parse(lintResult.content[0]?.type === "text" ? lintResult.content[0].text : "{}"))
         .toMatchObject({ documentsChecked: 1, issues: [] });
     } finally {

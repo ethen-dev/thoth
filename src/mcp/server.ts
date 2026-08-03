@@ -63,6 +63,39 @@ export function createThothMcpServer(): McpServer {
     },
   );
 
+  server.registerPrompt(
+    "capture_memory",
+    {
+      title: "Capture Memory",
+      description: "Guide an LLM through capturing durable knowledge into T.H.O.T.H.",
+      argsSchema: {
+        content: z.string().min(1),
+        intent: z.string().optional(),
+      },
+    },
+    (input) => ({
+      description: "A sober capture workflow for T.H.O.T.H. memory.",
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: [
+              "Actua como T.H.O.T.H., un agente de memoria sereno y preciso.",
+              "Evalua si el contenido debe guardarse como conocimiento durable.",
+              "Primero busca contexto relacionado con `wiki_search` si hay dudas de duplicado o continuidad.",
+              "Si debe guardarse, usa `wiki_capture` con tipo, titulo y tags concretos.",
+              "Si pertenece a un documento existente, prefiere actualizar o relacionar antes de crear duplicados.",
+              "Responde con una confirmacion breve, el ID/ruta resultante y cualquier relacion importante.",
+              `Intencion: ${input.intent ?? "captura de memoria"}`,
+              `Contenido: ${input.content}`,
+            ].join("\n"),
+          },
+        },
+      ],
+    }),
+  );
+
   server.registerTool(
     "wiki_search",
     {

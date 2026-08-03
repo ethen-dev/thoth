@@ -100,6 +100,10 @@ Resources implementados inicialmente:
 - `thoth://wiki/index`
 - `thoth://document/{id}`
 
+Prompts implementados inicialmente:
+
+- `capture_memory`
+
 ### capture_knowledge
 
 Captura informacion nueva y la convierte en una pagina de la LLM Wiki.
