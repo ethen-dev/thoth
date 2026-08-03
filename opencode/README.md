@@ -171,11 +171,38 @@ On Windows:
 
 ## Update Later
 
-After pulling a newer version of the repository, run the installers again:
+After pulling a newer version of the repository, run the updater.
+
+On macOS:
 
 ```sh
-opencode/install/install-thoth.command
-opencode/install/install-opencode-agent.command
+opencode/install/update-thoth.command
 ```
 
-This updates the installed command and OpenCode agent. It does not delete your wiki.
+On Linux:
+
+```sh
+opencode/install/update-thoth.sh
+```
+
+On Windows:
+
+```powershell
+.\opencode\install\update-thoth.ps1
+```
+
+The updater runs `git pull --ff-only` when the repository is a Git checkout, reinstalls T.H.O.T.H., and copies all OpenCode agents again.
+
+To preview an update without changing files:
+
+```sh
+opencode/install/update-thoth.sh --dry-run
+```
+
+To update without pulling from Git first:
+
+```sh
+opencode/install/update-thoth.sh --skip-pull
+```
+
+This updates the installed command and OpenCode agents. It does not delete your wiki.

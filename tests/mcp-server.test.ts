@@ -29,7 +29,7 @@ describe("MCP server", () => {
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = createThothMcpServer();
-    const client = new Client({ name: "thoth-test-client", version: "0.2.0" });
+    const client = new Client({ name: "thoth-test-client", version: "0.3.0" });
 
     await Promise.all([
       server.connect(serverTransport),

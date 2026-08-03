@@ -15,10 +15,13 @@ const subagentPaths = [
 const autonomousMemoryDocPath = join(root, "docs", "autonomous-memory.md");
 const macThothInstallerPath = join(root, "opencode", "install", "install-thoth.command");
 const macAgentInstallerPath = join(root, "opencode", "install", "install-opencode-agent.command");
+const macUpdaterPath = join(root, "opencode", "install", "update-thoth.command");
 const linuxThothInstallerPath = join(root, "opencode", "install", "install-thoth.sh");
 const linuxAgentInstallerPath = join(root, "opencode", "install", "install-opencode-agent.sh");
+const linuxUpdaterPath = join(root, "opencode", "install", "update-thoth.sh");
 const windowsThothInstallerPath = join(root, "opencode", "install", "install-thoth.ps1");
 const windowsAgentInstallerPath = join(root, "opencode", "install", "install-opencode-agent.ps1");
+const windowsUpdaterPath = join(root, "opencode", "install", "update-thoth.ps1");
 const readmePath = join(root, "opencode", "README.md");
 
 const requiredAgentSnippets = [
@@ -55,6 +58,9 @@ const requiredReadmeSnippets = [
   "install-opencode-agent.sh",
   "install-thoth.ps1",
   "install-opencode-agent.ps1",
+  "update-thoth.command",
+  "update-thoth.sh",
+  "update-thoth.ps1",
   "~/Documents/Thoth/workspace",
   "~/Documents/Thoth/wiki",
   "thoth doctor",
@@ -140,15 +146,20 @@ await Promise.all([
   assertFile(autonomousMemoryDocPath),
   assertFile(macThothInstallerPath),
   assertFile(macAgentInstallerPath),
+  assertFile(macUpdaterPath),
   assertFile(linuxThothInstallerPath),
   assertFile(linuxAgentInstallerPath),
+  assertFile(linuxUpdaterPath),
   assertFile(windowsThothInstallerPath),
   assertFile(windowsAgentInstallerPath),
+  assertFile(windowsUpdaterPath),
   assertFile(readmePath),
   assertExecutable(macThothInstallerPath),
   assertExecutable(macAgentInstallerPath),
+  assertExecutable(macUpdaterPath),
   assertExecutable(linuxThothInstallerPath),
   assertExecutable(linuxAgentInstallerPath),
+  assertExecutable(linuxUpdaterPath),
 ]);
 
 const [agent, readme, autonomousMemoryDoc] = await Promise.all([
@@ -168,29 +179,38 @@ for (const [index, subagent] of subagents.entries()) {
 
 run("zsh", ["-n", macThothInstallerPath]);
 run("zsh", ["-n", macAgentInstallerPath]);
+run("zsh", ["-n", macUpdaterPath]);
 run("bash", ["-n", linuxThothInstallerPath]);
 run("bash", ["-n", linuxAgentInstallerPath]);
+run("bash", ["-n", linuxUpdaterPath]);
 
 const macThothDryRun = run(macThothInstallerPath, ["--dry-run"]);
 const macAgentDryRun = run(macAgentInstallerPath, ["--dry-run"]);
+const macUpdaterDryRun = run(macUpdaterPath, ["--dry-run", "--skip-pull"]);
 const linuxThothDryRun = run(linuxThothInstallerPath, ["--dry-run"]);
 const linuxAgentDryRun = run(linuxAgentInstallerPath, ["--dry-run"]);
+const linuxUpdaterDryRun = run(linuxUpdaterPath, ["--dry-run", "--skip-pull"]);
 
 assertIncludes(macThothDryRun, ["DRY RUN", "install dependencies", "thoth init", "thoth doctor"], "macOS T.H.O.T.H. installer dry-run");
 assertIncludes(macAgentDryRun, ["DRY RUN", "thoth-memory.md", "thoth-archivist.md", "thoth-critic.md"], "macOS OpenCode agent installer dry-run");
+assertIncludes(macUpdaterDryRun, ["DRY RUN", "Skipping git pull", "install-thoth.command", "install-opencode-agent.command"], "macOS updater dry-run");
 assertIncludes(linuxThothDryRun, ["DRY RUN", "install dependencies", "thoth init", "thoth doctor"], "Linux T.H.O.T.H. installer dry-run");
 assertIncludes(linuxAgentDryRun, ["DRY RUN", "thoth-memory.md", "thoth-archivist.md", "thoth-critic.md"], "Linux OpenCode agent installer dry-run");
+assertIncludes(linuxUpdaterDryRun, ["DRY RUN", "Skipping git pull", "install-thoth.sh", "install-opencode-agent.sh"], "Linux updater dry-run");
 
 const windowsThothInstaller = await readFile(windowsThothInstallerPath, "utf8");
 const windowsAgentInstaller = await readFile(windowsAgentInstallerPath, "utf8");
+const windowsUpdater = await readFile(windowsUpdaterPath, "utf8");
 
 assertIncludes(windowsThothInstaller, ["param(", "[switch]$DryRun", "npm", "npm\" @(" , "thoth init", "thoth doctor"], "Windows T.H.O.T.H. installer");
 assertIncludes(windowsAgentInstaller, ["param(", "[switch]$DryRun", "*.md", "Copy-Item"], "Windows OpenCode agent installer");
+assertIncludes(windowsUpdater, ["param(", "[switch]$DryRun", "[switch]$SkipPull", "git", "install-thoth.ps1", "install-opencode-agent.ps1"], "Windows updater");
 
 const powershell = findCommand(["pwsh", "powershell"]);
 if (powershell) {
   run(powershell, ["-NoProfile", "-Command", `[scriptblock]::Create((Get-Content -Raw '${windowsThothInstallerPath.replaceAll("'", "''")}')) | Out-Null`]);
   run(powershell, ["-NoProfile", "-Command", `[scriptblock]::Create((Get-Content -Raw '${windowsAgentInstallerPath.replaceAll("'", "''")}')) | Out-Null`]);
+  run(powershell, ["-NoProfile", "-Command", `[scriptblock]::Create((Get-Content -Raw '${windowsUpdaterPath.replaceAll("'", "''")}')) | Out-Null`]);
 }
 
 console.log("OpenCode pack validation passed.");
