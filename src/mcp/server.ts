@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { fileURLToPath } from "node:url";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod/v4";
 import {
@@ -21,6 +21,47 @@ export function createThothMcpServer(): McpServer {
     name: "thoth",
     version: "0.1.0",
   });
+
+  server.registerResource(
+    "wiki_index",
+    "thoth://wiki/index",
+    {
+      title: "Wiki Index",
+      description: "Root Markdown index of the configured wiki.",
+      mimeType: "text/markdown",
+    },
+    async (uri) => {
+      const config = await loadConfig();
+      const document = await getWikiDocumentById(config, "wiki-index");
+
+      if (!document) {
+        throw new Error("Wiki index document not found: wiki-index");
+      }
+
+      return textResource(uri.href, document.raw, "text/markdown");
+    },
+  );
+
+  server.registerResource(
+    "wiki_document",
+    new ResourceTemplate("thoth://document/{id}", { list: undefined }),
+    {
+      title: "Wiki Document",
+      description: "Raw Markdown for a wiki document by id.",
+      mimeType: "text/markdown",
+    },
+    async (uri, variables) => {
+      const id = String(variables.id);
+      const config = await loadConfig();
+      const document = await getWikiDocumentById(config, id);
+
+      if (!document) {
+        throw new Error(`Document not found: ${id}`);
+      }
+
+      return textResource(uri.href, document.raw, "text/markdown");
+    },
+  );
 
   server.registerTool(
     "wiki_search",
@@ -235,6 +276,18 @@ function jsonResult(value: unknown) {
       {
         type: "text" as const,
         text: JSON.stringify(value, null, 2),
+      },
+    ],
+  };
+}
+
+function textResource(uri: string, text: string, mimeType: string) {
+  return {
+    contents: [
+      {
+        uri,
+        text,
+        mimeType,
       },
     ],
   };

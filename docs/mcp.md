@@ -95,6 +95,11 @@ Herramientas implementadas inicialmente:
 
 Todas reutilizan las acciones internas compartidas con la CLI.
 
+Resources implementados inicialmente:
+
+- `thoth://wiki/index`
+- `thoth://document/{id}`
+
 ### capture_knowledge
 
 Captura informacion nueva y la convierte en una pagina de la LLM Wiki.

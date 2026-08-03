@@ -38,6 +38,9 @@ describe("MCP server", () => {
 
     try {
       const tools = await client.listTools();
+      const resourceTemplates = await client.listResourceTemplates();
+      const indexResource = await client.readResource({ uri: "thoth://wiki/index" });
+      const projectResource = await client.readResource({ uri: "thoth://document/wiki-index" });
       const lintResult = await client.callTool({ name: "wiki_lint", arguments: {} });
 
       expect(tools.tools.map((tool) => tool.name)).toEqual(
@@ -53,6 +56,10 @@ describe("MCP server", () => {
         ]),
       );
       expect(lintResult.content[0]).toMatchObject({ type: "text" });
+      expect(resourceTemplates.resourceTemplates.map((template) => template.uriTemplate))
+        .toContain("thoth://document/{id}");
+      expect(indexResource.contents[0]).toMatchObject({ mimeType: "text/markdown" });
+      expect(projectResource.contents[0]).toMatchObject({ mimeType: "text/markdown" });
       expect(JSON.parse(lintResult.content[0]?.type === "text" ? lintResult.content[0].text : "{}"))
         .toMatchObject({ documentsChecked: 1, issues: [] });
     } finally {
