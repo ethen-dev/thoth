@@ -207,6 +207,10 @@ Los logs deben vivir en `logs/` como archivos separados por sesion. Evitar un un
 
 La organizacion por carpetas debe ayudar a navegar manualmente, pero el sistema no debe depender solo de la ruta. Los metadatos deben ser la fuente principal para clasificar documentos.
 
+Los proyectos complejos pueden usar subdirectorios dentro de `projects/` para agrupar subareas relacionadas. Por ejemplo, `projects/thoth/project-thoth.md` puede actuar como raiz y `projects/thoth/mcp.md`, `projects/thoth/cli.md` o `projects/thoth/agents.md` como subdocumentos relacionados mediante `related`.
+
+Este patron evita saturar la lista global de proyectos y mantiene juntas las piezas duraderas de un mismo proyecto.
+
 ## Indice
 
 El indice debe permitir localizar documentos y entender relaciones generales.
