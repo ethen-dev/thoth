@@ -80,6 +80,18 @@ capture_knowledge({
 
 ## Herramientas Iniciales
 
+La primera implementacion expone un servidor stdio ejecutable como `thoth-mcp`.
+
+Herramientas implementadas inicialmente:
+
+- `wiki_search`
+- `wiki_show`
+- `wiki_capture`
+- `wiki_index`
+- `wiki_lint`
+
+Todas reutilizan las acciones internas compartidas con la CLI.
+
 ### capture_knowledge
 
 Captura informacion nueva y la convierte en una pagina de la LLM Wiki.
