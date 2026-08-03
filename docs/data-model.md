@@ -28,6 +28,8 @@ Una pagina debe contener:
 
 Cada pagina debe empezar con un bloque YAML.
 
+El contrato portable inicial vive en `schemas/wiki-document.schema.json`.
+
 Campos iniciales:
 
 ```yaml
@@ -127,6 +129,8 @@ Cada relacion debe indicar el `id` del documento relacionado y el tipo de relaci
 
 Las relaciones permiten que la wiki funcione como una red de conocimiento, no como un conjunto de archivos aislados.
 
+El contrato portable inicial vive en `schemas/wiki-relation.schema.json`.
+
 Relaciones iniciales:
 
 - `belongs_to`: pertenece a otro documento o proyecto
@@ -208,6 +212,8 @@ La organizacion por carpetas debe ayudar a navegar manualmente, pero el sistema 
 El indice debe permitir localizar documentos y entender relaciones generales.
 
 Inicialmente puede ser un archivo `wiki/index.md` generado o mantenido por T.H.O.T.H.
+
+Los indices derivados JSON usan `schemas/wiki-index.schema.json` y `schemas/wiki-relations-index.schema.json`.
 
 El indice puede incluir:
 
