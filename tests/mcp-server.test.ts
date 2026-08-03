@@ -41,7 +41,16 @@ describe("MCP server", () => {
       const lintResult = await client.callTool({ name: "wiki_lint", arguments: {} });
 
       expect(tools.tools.map((tool) => tool.name)).toEqual(
-        expect.arrayContaining(["wiki_search", "wiki_show", "wiki_capture", "wiki_index", "wiki_lint"]),
+        expect.arrayContaining([
+          "wiki_search",
+          "wiki_list",
+          "wiki_show",
+          "wiki_capture",
+          "wiki_update",
+          "wiki_relate",
+          "wiki_index",
+          "wiki_lint",
+        ]),
       );
       expect(lintResult.content[0]).toMatchObject({ type: "text" });
       expect(JSON.parse(lintResult.content[0]?.type === "text" ? lintResult.content[0].text : "{}"))

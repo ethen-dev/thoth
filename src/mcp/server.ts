@@ -8,9 +8,12 @@ import { loadConfig } from "../core/index.js";
 import {
   captureWikiDocument,
   getWikiDocumentById,
+  listWikiDocuments,
   lintWikiDocuments,
+  relateWikiDocuments,
   rebuildWikiIndex,
   searchWikiDocuments,
+  updateWikiDocument,
 } from "../wiki/index.js";
 
 export function createThothMcpServer(): McpServer {
@@ -44,6 +47,29 @@ export function createThothMcpServer(): McpServer {
   );
 
   server.registerTool(
+    "wiki_list",
+    {
+      title: "List Wiki Documents",
+      description: "List wiki documents with optional metadata filters.",
+      inputSchema: {
+        type: z.string().optional(),
+        status: z.string().optional(),
+        tag: z.string().optional(),
+      },
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+      },
+    },
+    async (input) => {
+      const config = await loadConfig();
+      const documents = await listWikiDocuments(config, input);
+
+      return jsonResult({ documents });
+    },
+  );
+
+  server.registerTool(
     "wiki_show",
     {
       title: "Show Wiki Document",
@@ -51,6 +77,10 @@ export function createThothMcpServer(): McpServer {
       inputSchema: {
         id: z.string().min(1),
         mode: z.enum(["content", "metadata", "raw"]).default("content"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
       },
     },
     async (input) => {
@@ -93,6 +123,10 @@ export function createThothMcpServer(): McpServer {
         status: z.string().optional(),
         tags: z.array(z.string()).optional(),
       },
+      annotations: {
+        readOnlyHint: false,
+        idempotentHint: true,
+      },
     },
     async (input) => {
       const config = await loadConfig();
@@ -103,10 +137,61 @@ export function createThothMcpServer(): McpServer {
   );
 
   server.registerTool(
+    "wiki_update",
+    {
+      title: "Update Wiki Document",
+      description: "Update simple metadata for an existing wiki document.",
+      inputSchema: {
+        id: z.string().min(1),
+        title: z.string().optional(),
+        type: z.string().optional(),
+        status: z.string().optional(),
+        tags: z.array(z.string()).optional(),
+      },
+      annotations: {
+        readOnlyHint: false,
+      },
+    },
+    async (input) => {
+      const config = await loadConfig();
+      const result = await updateWikiDocument(config, input);
+
+      return jsonResult(result);
+    },
+  );
+
+  server.registerTool(
+    "wiki_relate",
+    {
+      title: "Relate Wiki Documents",
+      description: "Create a relation from one existing wiki document to another.",
+      inputSchema: {
+        sourceId: z.string().min(1),
+        targetId: z.string().min(1),
+        relation: z.string().min(1),
+      },
+      annotations: {
+        readOnlyHint: false,
+        idempotentHint: true,
+      },
+    },
+    async (input) => {
+      const config = await loadConfig();
+      const result = await relateWikiDocuments(config, input);
+
+      return jsonResult(result);
+    },
+  );
+
+  server.registerTool(
     "wiki_index",
     {
       title: "Rebuild Wiki Index",
       description: "Rebuild derived wiki index files.",
+      annotations: {
+        readOnlyHint: false,
+        idempotentHint: true,
+      },
     },
     async () => {
       const config = await loadConfig();
@@ -121,6 +206,10 @@ export function createThothMcpServer(): McpServer {
     {
       title: "Lint Wiki",
       description: "Validate wiki document consistency.",
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+      },
     },
     async () => {
       const config = await loadConfig();

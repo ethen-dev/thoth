@@ -85,8 +85,11 @@ La primera implementacion expone un servidor stdio ejecutable como `thoth-mcp`.
 Herramientas implementadas inicialmente:
 
 - `wiki_search`
+- `wiki_list`
 - `wiki_show`
 - `wiki_capture`
+- `wiki_update`
+- `wiki_relate`
 - `wiki_index`
 - `wiki_lint`
 
