@@ -90,6 +90,16 @@ export type WikiIndexResult = {
   warnings: string[];
 };
 
+export type WikiLintIssue = {
+  path: string;
+  message: string;
+};
+
+export type WikiLintResult = {
+  documentsChecked: number;
+  issues: WikiLintIssue[];
+};
+
 export async function getWikiStatus(
   config: ResolvedThothConfig,
 ): Promise<WikiStatus> {
@@ -331,6 +341,70 @@ export async function rebuildWikiIndex(
   };
 }
 
+export async function lintWikiDocuments(
+  config: ResolvedThothConfig,
+): Promise<WikiLintResult> {
+  if (!(await pathExists(config.resolvedWikiPath))) {
+    return { documentsChecked: 0, issues: [] };
+  }
+
+  const markdownPaths = await collectMarkdownFiles(config.resolvedWikiPath);
+  const documents: WikiDocument[] = [];
+  const issues: WikiLintIssue[] = [];
+  const ids = new Map<string, string[]>();
+
+  for (const markdownPath of markdownPaths) {
+    const document = await readWikiDocument(config.resolvedWikiPath, markdownPath);
+    documents.push(document);
+
+    for (const field of ["id", "title", "type", "status"]) {
+      if (!hasStringMetadata(document.metadata, field)) {
+        issues.push({
+          path: document.path,
+          message: `Missing required frontmatter: ${field}`,
+        });
+      }
+    }
+
+    const paths = ids.get(document.id) ?? [];
+    paths.push(document.path);
+    ids.set(document.id, paths);
+  }
+
+  for (const [id, paths] of ids) {
+    if (paths.length <= 1) {
+      continue;
+    }
+
+    for (const documentPath of paths) {
+      issues.push({
+        path: documentPath,
+        message: `Duplicate document id: ${id}`,
+      });
+    }
+  }
+
+  const knownIds = new Set(ids.keys());
+
+  for (const document of documents) {
+    for (const relation of readRelations(document.metadata.related)) {
+      if (!knownIds.has(relation.id)) {
+        issues.push({
+          path: document.path,
+          message: `Broken relation: ${document.id} -> ${relation.id} (${relation.relation})`,
+        });
+      }
+    }
+  }
+
+  return {
+    documentsChecked: documents.length,
+    issues: issues.sort((left, right) =>
+      `${left.path}:${left.message}`.localeCompare(`${right.path}:${right.message}`),
+    ),
+  };
+}
+
 async function readWikiDocument(
   wikiPath: string,
   markdownPath: string,
@@ -427,6 +501,12 @@ function readRelations(value: unknown): Array<{ id: string; relation: string }> 
 
     return [{ id, relation: relationType }];
   });
+}
+
+function hasStringMetadata(metadata: Record<string, unknown>, field: string): boolean {
+  const value = metadata[field];
+
+  return typeof value === "string" && value.length > 0;
 }
 
 function readString(value: unknown, fallback: string): string {

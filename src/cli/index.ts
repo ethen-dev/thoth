@@ -8,6 +8,7 @@ import {
   getWikiStatus,
   initializeWiki,
   listWikiDocuments,
+  lintWikiDocuments,
   rebuildWikiIndex,
   searchWikiDocuments,
 } from "../wiki/index.js";
@@ -213,6 +214,33 @@ program
           console.log(`- ${warning}`);
         }
       }
+    } catch (error) {
+      reportError(error);
+    }
+  });
+
+program
+  .command("lint")
+  .description("Validate wiki document consistency")
+  .action(async () => {
+    try {
+      const config = await loadConfig();
+      const result = await lintWikiDocuments(config);
+
+      console.log(`Documents checked: ${result.documentsChecked}`);
+
+      if (result.issues.length === 0) {
+        console.log("Issues: none");
+        return;
+      }
+
+      console.log(`Issues: ${result.issues.length}`);
+
+      for (const issue of result.issues) {
+        console.log(`- ${issue.path}: ${issue.message}`);
+      }
+
+      process.exitCode = 1;
     } catch (error) {
       reportError(error);
     }

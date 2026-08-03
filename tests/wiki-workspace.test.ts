@@ -9,6 +9,7 @@ import {
   getWikiStatus,
   initializeWiki,
   listWikiDocuments,
+  lintWikiDocuments,
   rebuildWikiIndex,
   searchWikiDocuments,
 } from "../src/wiki/index.js";
@@ -270,6 +271,74 @@ related:
         relation: "references",
       },
     ]);
+  });
+
+  it("lints required metadata, duplicate ids, and broken relations", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    await writeFile(
+      path.join(config.resolvedWikiPath, "notes", "first.md"),
+      `---
+id: duplicate-note
+title: First Note
+type: note
+status: active
+related:
+  - id: missing-note
+    relation: references
+---
+
+# First Note
+`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(config.resolvedWikiPath, "notes", "second.md"),
+      `---
+id: duplicate-note
+title: Second Note
+type: note
+status: active
+---
+
+# Second Note
+`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(config.resolvedWikiPath, "notes", "missing-status.md"),
+      `---
+id: missing-status
+title: Missing Status
+type: note
+---
+
+# Missing Status
+`,
+      "utf8",
+    );
+
+    const result = await lintWikiDocuments(config);
+
+    expect(result.documentsChecked).toBeGreaterThan(0);
+    expect(result.issues).toContainEqual({
+      path: "notes/first.md",
+      message: "Broken relation: duplicate-note -> missing-note (references)",
+    });
+    expect(result.issues).toContainEqual({
+      path: "notes/first.md",
+      message: "Duplicate document id: duplicate-note",
+    });
+    expect(result.issues).toContainEqual({
+      path: "notes/second.md",
+      message: "Duplicate document id: duplicate-note",
+    });
+    expect(result.issues).toContainEqual({
+      path: "notes/missing-status.md",
+      message: "Missing required frontmatter: status",
+    });
   });
 });
 
