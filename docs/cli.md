@@ -102,6 +102,7 @@ Ejemplos:
 thoth capture "Idea para un sistema de agentes personales"
 thoth capture --type idea "Crear una skill para resumir reuniones"
 thoth capture --file notes/session.md
+thoth capture --type note --title "Nota importante" --tag cli "Contenido a guardar"
 ```
 
 Responsabilidades:
@@ -111,14 +112,18 @@ Responsabilidades:
 - generar metadatos iniciales
 - crear una pagina Markdown con frontmatter YAML
 - actualizar el indice cuando sea necesario
+- evitar sobrescribir documentos existentes
 
 Opciones iniciales:
 
 - `--type`: tipo de documento
 - `--title`: titulo explicito
 - `--tags`: etiquetas separadas por coma
+- `--tag`: etiqueta repetible
 - `--file`: archivo de entrada
 - `--project`: proyecto al que pertenece
+
+La primera implementacion soporta texto directo y `--tag` repetible. `--file`, `--project` y clasificacion automatica quedan para fases posteriores.
 
 ### thoth list
 

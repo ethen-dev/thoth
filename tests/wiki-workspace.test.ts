@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/core/index.js";
 import {
+  captureWikiDocument,
   getWikiDocumentById,
   getWikiStatus,
   initializeWiki,
@@ -138,6 +139,33 @@ Visible content.
     expect(document?.content).toContain("Visible content.");
     expect(document?.raw).toContain("id: project-example");
     expect(missingDocument).toBeNull();
+  });
+
+  it("captures a wiki document without overwriting existing content", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    const firstCapture = await captureWikiDocument(config, {
+      content: "Capture this durable note.",
+      title: "Durable Note",
+      type: "note",
+      tags: ["memory", "test"],
+    });
+    const secondCapture = await captureWikiDocument(config, {
+      content: "Different content should not overwrite.",
+      title: "Durable Note",
+      type: "note",
+      tags: ["memory", "test"],
+    });
+    const document = await getWikiDocumentById(config, firstCapture.id);
+
+    expect(firstCapture.created).toBe(true);
+    expect(secondCapture.created).toBe(false);
+    expect(firstCapture.path).toBe("notes/note-durable-note.md");
+    expect(document?.content).toContain("Capture this durable note.");
+    expect(document?.content).not.toContain("Different content should not overwrite.");
+    expect(document?.tags).toEqual(["memory", "test"]);
   });
 });
 

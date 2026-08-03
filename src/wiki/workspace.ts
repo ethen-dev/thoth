@@ -53,6 +53,23 @@ export type WikiListFilters = {
   tag?: string;
 };
 
+export type WikiCaptureInput = {
+  content: string;
+  title?: string;
+  type?: string;
+  status?: string;
+  tags?: string[];
+};
+
+export type WikiCaptureResult = {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  path: string;
+  created: boolean;
+};
+
 export async function getWikiStatus(
   config: ResolvedThothConfig,
 ): Promise<WikiStatus> {
@@ -149,6 +166,38 @@ export async function getWikiDocumentById(
   return null;
 }
 
+export async function captureWikiDocument(
+  config: ResolvedThothConfig,
+  input: WikiCaptureInput,
+): Promise<WikiCaptureResult> {
+  const type = input.type ?? config.defaultType;
+  const status = input.status ?? config.defaultStatus;
+  const title = input.title ?? createTitle(input.content);
+  const id = `${type}-${slugify(title)}`;
+  const directory = directoryForType(type);
+  const relativePath = path.join(directory, `${id}.md`);
+  const filePath = path.join(config.resolvedWikiPath, relativePath);
+  const markdown = createWikiDocumentMarkdown({
+    id,
+    title,
+    type,
+    status,
+    tags: input.tags ?? [],
+    content: input.content,
+    date: currentDate(),
+  });
+  const result = await writeFileIfMissing(filePath, markdown);
+
+  return {
+    id,
+    title,
+    type,
+    status,
+    path: relativePath,
+    created: result === "created",
+  };
+}
+
 async function readWikiDocument(
   wikiPath: string,
   markdownPath: string,
@@ -224,6 +273,89 @@ function readStringArray(value: unknown): string[] {
   }
 
   return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+function createWikiDocumentMarkdown(input: {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  tags: string[];
+  content: string;
+  date: string;
+}): string {
+  const tags = input.tags.length > 0
+    ? `\n${input.tags.map((tag) => `  - ${yamlString(tag)}`).join("\n")}`
+    : " []";
+
+  return `---
+id: ${yamlString(input.id)}
+title: ${yamlString(input.title)}
+type: ${yamlString(input.type)}
+status: ${yamlString(input.status)}
+created_at: ${input.date}
+updated_at: ${input.date}
+tags:${tags}
+source: "manual"
+related: []
+---
+
+# ${input.title}
+
+## Summary
+
+${input.content}
+
+## Content
+
+${input.content}
+`;
+}
+
+function currentDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function yamlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function createTitle(content: string): string {
+  const firstLine = content.trim().split("\n")[0]?.trim();
+
+  if (!firstLine) {
+    return "Untitled";
+  }
+
+  return firstLine.length > 60 ? firstLine.slice(0, 60).trim() : firstLine;
+}
+
+function directoryForType(type: string): string {
+  const directories: Record<string, string> = {
+    decision: "decisions",
+    entity: "entities",
+    idea: "ideas",
+    implementation: "implementation",
+    log: "logs",
+    note: "notes",
+    project: "projects",
+    research: "research",
+    session: "sessions",
+    timeline: "timelines",
+  };
+
+  return directories[type] ?? "notes";
+}
+
+function slugify(value: string): string {
+  const slug = value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return slug || "untitled";
 }
 
 function createWikiIndex(): string {

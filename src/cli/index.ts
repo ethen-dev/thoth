@@ -3,6 +3,7 @@
 import { Command } from "commander";
 import { loadConfig } from "../core/index.js";
 import {
+  captureWikiDocument,
   getWikiDocumentById,
   getWikiStatus,
   initializeWiki,
@@ -120,10 +121,51 @@ program
     },
   );
 
+program
+  .command("capture")
+  .description("Capture content into the configured LLM Wiki")
+  .argument("<content>", "Content to capture")
+  .option("--type <type>", "Document type")
+  .option("--title <title>", "Document title")
+  .option("--status <status>", "Document status")
+  .option("--tag <tag>", "Document tag. Can be used multiple times", collectValues, [])
+  .action(
+    async (
+      content: string,
+      options: {
+        type?: string;
+        title?: string;
+        status?: string;
+        tag?: string[];
+      },
+    ) => {
+      try {
+        const config = await loadConfig();
+        const result = await captureWikiDocument(config, {
+          content,
+          title: options.title,
+          type: options.type,
+          status: options.status,
+          tags: options.tag,
+        });
+
+        console.log(`Document: ${result.id}`);
+        console.log(`Path: ${result.path}`);
+        console.log(`Status: ${result.created ? "created" : "exists"}`);
+      } catch (error) {
+        reportError(error);
+      }
+    },
+  );
+
 program.parse();
 
 function reportError(error: unknown): never {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`T.H.O.T.H. cannot proceed: ${message}`);
   process.exit(1);
+}
+
+function collectValues(value: string, previous: string[]): string[] {
+  return [...previous, value];
 }
