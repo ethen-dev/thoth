@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
+import { loadConfig } from "../core/index.js";
+import { getWikiStatus, initializeWiki } from "../wiki/index.js";
 
 const program = new Command();
 
@@ -10,10 +12,51 @@ program
   .version("0.1.0");
 
 program
+  .command("init")
+  .description("Initialize the configured LLM Wiki workspace")
+  .action(async () => {
+    try {
+      const config = await loadConfig();
+      const result = await initializeWiki(config);
+
+      console.log(`Wiki path: ${result.wikiPath}`);
+      console.log(`Directories created: ${result.createdDirectories.length}`);
+      console.log(`Index: ${result.index}`);
+      console.log("T.H.O.T.H. wiki is ready.");
+    } catch (error) {
+      reportError(error);
+    }
+  });
+
+program
   .command("status")
   .description("Show workspace status")
-  .action(() => {
-    console.log("T.H.O.T.H. workspace status is not implemented yet.");
+  .action(async () => {
+    try {
+      const config = await loadConfig();
+      const status = await getWikiStatus(config);
+
+      console.log(`Workspace: ${status.workspacePath}`);
+      console.log(`Config: ${status.configPath}`);
+      console.log(`Wiki: ${status.wikiPath}`);
+      console.log(`Wiki exists: ${status.wikiExists ? "yes" : "no"}`);
+      console.log(`Index exists: ${status.indexExists ? "yes" : "no"}`);
+      console.log(
+        `Missing directories: ${
+          status.missingDirectories.length > 0
+            ? status.missingDirectories.join(", ")
+            : "none"
+        }`,
+      );
+    } catch (error) {
+      reportError(error);
+    }
   });
 
 program.parse();
+
+function reportError(error: unknown): never {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`T.H.O.T.H. cannot proceed: ${message}`);
+  process.exit(1);
+}

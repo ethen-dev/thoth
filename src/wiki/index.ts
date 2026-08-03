@@ -1,3 +1,5 @@
+export * from "./workspace.js";
+
 export type WikiDocumentType =
   | "project"
   | "note"
