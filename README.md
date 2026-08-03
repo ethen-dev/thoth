@@ -137,6 +137,7 @@ Implemented MCP prompts:
 - `schemas/`: portable JSON Schemas.
 - `docs/`: architecture, data model, CLI and MCP documentation.
 - `agents/` and `skills/`: future agent and skill contracts.
+- `examples/minimal-workspace/`: compact runnable workspace/wiki example.
 
 ## Verification
 
