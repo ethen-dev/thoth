@@ -2,18 +2,136 @@
 
 **Transversal Heuristic Organizer of Trusted History**
 
-T.H.O.T.H. nace como el agente maestro de un sistema para gestionar conocimiento persistente en formato **LLM Wiki**.
+T.H.O.T.H. is a local memory system for turning scattered information into a durable **LLM Wiki**: Markdown documents with YAML frontmatter, relations, derived indexes, CLI operations, and an MCP server for LLM clients.
 
-Su objetivo es recibir informacion dispersa, analizarla, clasificarla y delegar su tratamiento cuando sea necesario, convirtiendola en memoria estructurada y consultable a futuro.
+The current MVP is local-first. Markdown is the source of truth. `.thoth/index.json` and `.thoth/relations.json` are derived and can be regenerated.
 
-Este conocimiento puede incluir documentacion de proyectos, ideas, notas personales, lore, capitulos, decisiones, investigaciones o cualquier material con el que se este trabajando.
+## Status
 
-T.H.O.T.H. no pretende ser solo un archivo pasivo. Su funcion es actuar como un archivista inteligente: preservar contexto, ordenar informacion, detectar relaciones y facilitar que el conocimiento pueda ser reutilizado de forma clara, confiable y evolutiva.
+Usable local MVP components:
 
-Este repositorio contiene la base del proyecto T.H.O.T.H.: agentes, skills, estructuras de datos, documentacion, herramientas y componentes necesarios para convertirlo en un sistema usable por cualquier persona.
+- CLI: `init`, `status`, `list`, `show`, `capture`, `append`, `search`, `index`, `lint`, `update`, `relate`, `doctor`.
+- MCP stdio server: tools, resources, and the `capture_memory` prompt.
+- JSON Schemas for wiki documents and derived indexes.
+- External wiki support via `thoth.config.json`.
 
-La intencion es que T.H.O.T.H. pueda evolucionar hacia una herramienta practica, incluyendo interfaces como CLI, flujos de trabajo configurables y mecanismos para almacenar, consultar y extender conocimiento de forma modular.
+## Install For Development
 
-La wiki no forma parte del repositorio del proyecto. Para este workspace, T.H.O.T.H. usara la ruta definida en `thoth.config.json`: `../wiki`.
+```bash
+npm install
+npm run build
+```
 
-Este README se ampliara progresivamente a medida que el proyecto defina su arquitectura, flujo de trabajo, agentes especializados, skills, CLI y modelo de almacenamiento.
+Run the CLI from source:
+
+```bash
+npm run dev -- --help
+```
+
+Run the built binaries:
+
+```bash
+node dist/cli/index.js --help
+node dist/mcp/server.js --version
+```
+
+## Minimal Config
+
+Create `thoth.config.json` in your workspace:
+
+```json
+{
+  "wikiPath": "../wiki"
+}
+```
+
+`wikiPath` may point outside the repository. This is the recommended shape: project code and durable wiki memory stay separate.
+
+## Quickstart
+
+Initialize the wiki:
+
+```bash
+npm run dev -- init
+```
+
+Capture a note:
+
+```bash
+npm run dev -- capture "T.H.O.T.H. keeps durable context in Markdown." --type note --title "Durable Context" --tag memory
+```
+
+List and read documents:
+
+```bash
+npm run dev -- list
+npm run dev -- show note-durable-context
+```
+
+Append to an existing document:
+
+```bash
+npm run dev -- append note-durable-context "This note was extended later." --section Notes
+```
+
+Search and relate knowledge:
+
+```bash
+npm run dev -- search "durable context"
+npm run dev -- relate note-durable-context project-thoth --relation belongs_to
+```
+
+Rebuild indexes and diagnose the workspace:
+
+```bash
+npm run dev -- index
+npm run dev -- lint
+npm run dev -- doctor
+```
+
+## MCP
+
+Start the MCP server over stdio:
+
+```bash
+npm run mcp:dev -- --version
+node dist/mcp/server.js --version
+```
+
+Implemented MCP tools:
+
+- `wiki_search`
+- `wiki_list`
+- `wiki_show`
+- `wiki_capture`
+- `wiki_update`
+- `wiki_relate`
+- `wiki_index`
+- `wiki_lint`
+
+Implemented MCP resources:
+
+- `thoth://wiki/index`
+- `thoth://document/{id}`
+
+Implemented MCP prompts:
+
+- `capture_memory`
+
+## Repository Map
+
+- `src/cli/`: CLI entrypoint.
+- `src/mcp/`: MCP stdio server.
+- `src/actions/`: shared action surface used by CLI and MCP.
+- `src/wiki/`: Markdown wiki workspace implementation.
+- `schemas/`: portable JSON Schemas.
+- `docs/`: architecture, data model, CLI and MCP documentation.
+- `agents/` and `skills/`: future agent and skill contracts.
+
+## Verification
+
+```bash
+npm run typecheck
+npm test
+npm run build
+```
