@@ -13,7 +13,9 @@ flowchart TD
   Core --> MCP[MCP Tools]
   Core --> Agents[Agentes]
   Core --> Skills[Skills]
-  MCP --> Wiki[LLM Wiki]
+  MCP --> Actions[Actions]
+  CLI --> Actions
+  Actions --> Wiki[LLM Wiki]
   Agents --> Skills
   Skills --> Wiki
   Wiki --> Storage[Storage]
@@ -57,6 +59,14 @@ La LLM Wiki es la memoria persistente del sistema.
 Debe almacenar informacion en documentos legibles, estructurados y faciles de consultar tanto por humanos como por modelos de lenguaje.
 
 La wiki debe priorizar claridad, trazabilidad y relaciones entre piezas de conocimiento.
+
+### Actions
+
+Actions es la superficie interna compartida por CLI y MCP.
+
+Su funcion es estabilizar los contratos operativos antes de llegar a la implementacion concreta de workspace, almacenamiento o wiki.
+
+Inicialmente es una capa delgada, deliberadamente pequena, para evitar abstraccion prematura.
 
 ### Storage
 

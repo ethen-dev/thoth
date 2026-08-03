@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { loadConfig } from "../core/index.js";
 import {
   captureWikiDocument,
   getWikiDocumentById,
@@ -13,7 +12,8 @@ import {
   rebuildWikiIndex,
   searchWikiDocuments,
   updateWikiDocument,
-} from "../wiki/index.js";
+} from "../actions/index.js";
+import { loadConfig } from "../core/index.js";
 
 const program = new Command();
 

@@ -1,0 +1,30 @@
+export {
+  captureWikiDocument,
+  getWikiDocumentById,
+  getWikiStatus,
+  initializeWiki,
+  listWikiDocuments,
+  lintWikiDocuments,
+  relateWikiDocuments,
+  rebuildWikiIndex,
+  searchWikiDocuments,
+  updateWikiDocument,
+} from "../wiki/index.js";
+
+export type {
+  WikiCaptureInput,
+  WikiCaptureResult,
+  WikiDocument,
+  WikiDocumentSummary,
+  WikiIndexResult,
+  WikiLintIssue,
+  WikiLintResult,
+  WikiListFilters,
+  WikiRelateInput,
+  WikiRelateResult,
+  WikiSearchFilters,
+  WikiSearchResult,
+  WikiStatus,
+  WikiUpdateInput,
+  WikiUpdateResult,
+} from "../wiki/index.js";

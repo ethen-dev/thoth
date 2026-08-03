@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod/v4";
-import { loadConfig } from "../core/index.js";
 import {
   captureWikiDocument,
   getWikiDocumentById,
@@ -14,7 +13,8 @@ import {
   rebuildWikiIndex,
   searchWikiDocuments,
   updateWikiDocument,
-} from "../wiki/index.js";
+} from "../actions/index.js";
+import { loadConfig } from "../core/index.js";
 
 export function createThothMcpServer(): McpServer {
   const server = new McpServer({
