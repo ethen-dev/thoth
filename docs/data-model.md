@@ -72,6 +72,9 @@ Tipos iniciales:
 - `note`
 - `idea`
 - `decision`
+- `implementation`
+- `session`
+- `log`
 - `research`
 - `entity`
 - `character`
@@ -177,10 +180,26 @@ wiki/
   notes/
   ideas/
   decisions/
+  implementation/
+  sessions/
+  logs/
   research/
   entities/
   timelines/
 ```
+
+## Taxonomia de Memoria
+
+La wiki debe separar decisiones de implementaciones.
+
+- `decision`: registra una decision conceptual, arquitectonica o de producto.
+- `implementation`: registra que se implemento, como se hizo, archivos tocados y verificacion.
+- `session`: cristaliza una conversacion o bloque de trabajo.
+- `log`: mantiene un registro cronologico por sesion o bloque de trabajo.
+
+No se deben guardar implementaciones como decisiones salvo que la implementacion sea en si misma una decision arquitectonica.
+
+Los logs deben vivir en `logs/` como archivos separados por sesion. Evitar un unico `log.md` global salvo que exista una necesidad concreta de indice agregado.
 
 La organizacion por carpetas debe ayudar a navegar manualmente, pero el sistema no debe depender solo de la ruta. Los metadatos deben ser la fuente principal para clasificar documentos.
 

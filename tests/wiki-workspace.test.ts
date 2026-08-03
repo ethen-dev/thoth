@@ -57,6 +57,8 @@ describe("wiki workspace", () => {
     expect(status.wikiExists).toBe(false);
     expect(status.indexExists).toBe(false);
     expect(status.missingDirectories).toContain("projects");
+    expect(status.missingDirectories).toContain("implementation");
+    expect(status.missingDirectories).toContain("logs");
   });
 
   it("lists markdown documents and applies metadata filters", async () => {
