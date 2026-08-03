@@ -98,6 +98,8 @@ npm run mcp:dev -- --version
 node dist/mcp/server.js --version
 ```
 
+Client configuration examples are documented in `docs/mcp-configuration.md`.
+
 Implemented MCP tools:
 
 - `wiki_search`

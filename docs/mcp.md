@@ -82,6 +82,8 @@ capture_knowledge({
 
 La primera implementacion expone un servidor stdio ejecutable como `thoth-mcp`.
 
+La configuracion de clientes MCP esta documentada en `docs/mcp-configuration.md`.
+
 Herramientas implementadas inicialmente:
 
 - `wiki_search`
