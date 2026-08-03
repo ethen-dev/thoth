@@ -84,6 +84,12 @@ Agentes dedicados a revision, coherencia, conflictos, duplicados y seguridad de 
 
 Incluye `critic`.
 
+### development
+
+Agentes temporales usados para desarrollar T.H.O.T.H.
+
+No forman parte del comportamiento final del sistema de memoria. Viven en `agents/development/` y siguen un flujo basico inspirado en Gentle-AI: route, explore, implement, review, verify y receipt.
+
 ## Flujo de Delegacion
 
 ```mermaid
