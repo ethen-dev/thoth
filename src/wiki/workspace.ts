@@ -1,4 +1,4 @@
-import { lstat, readdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { lstat, readdir, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Ajv2020 } from "ajv/dist/2020.js";
@@ -6,9 +6,11 @@ import type { AnySchema, ErrorObject, ValidateFunction } from "ajv";
 import matter from "gray-matter";
 import type { ResolvedThothConfig } from "../core/config.js";
 import {
-  appendTextToFile,
+  atomicWriteBatch,
+  atomicWriteFile,
   ensureDirectory,
   pathExists,
+  withWorkspaceLock,
   writeFileIfMissing,
 } from "../storage/index.js";
 
@@ -339,7 +341,7 @@ export async function getWikiStatus(
   };
 }
 
-export async function initializeWiki(
+async function initializeWikiUnsafe(
   config: ResolvedThothConfig,
 ): Promise<WikiInitResult> {
   const createdDirectories: string[] = [];
@@ -357,12 +359,12 @@ export async function initializeWiki(
 
   const index = await writeFileIfMissing(
     path.join(config.resolvedWikiPath, "index.md"),
-    createWikiIndex(),
+    createWikiIndex(), { workspaceRoot: config.resolvedWikiPath },
   );
 
   const log = await writeFileIfMissing(
     path.join(config.resolvedWikiPath, "log.md"),
-    createWikiLog(),
+    createWikiLog(), { workspaceRoot: config.resolvedWikiPath },
   );
 
   const status = await getWikiStatus(config);
@@ -373,6 +375,10 @@ export async function initializeWiki(
     index,
     log,
   };
+}
+
+export function initializeWiki(config: ResolvedThothConfig): Promise<WikiInitResult> {
+  return withWorkspaceLock(config.resolvedWikiPath, () => initializeWikiUnsafe(config));
 }
 
 export async function listWikiDocuments(
@@ -404,7 +410,7 @@ export async function getWikiDocumentById(
   return (await findWikiDocumentById(config.resolvedWikiPath, documentId))?.document ?? null;
 }
 
-export async function captureWikiDocument(
+async function captureWikiDocumentUnsafe(
   config: ResolvedThothConfig,
   input: WikiCaptureInput,
 ): Promise<WikiCaptureResult> {
@@ -443,7 +449,7 @@ export async function captureWikiDocument(
     date: currentDate(),
     related: projectSlug ? [{ id: input.projectId as string, relation: "belongs_to" }] : [],
   });
-  const result = await writeFileIfMissing(filePath, markdown);
+  const result = await writeFileIfMissing(filePath, markdown, { workspaceRoot: config.resolvedWikiPath });
 
   return {
     id,
@@ -455,7 +461,11 @@ export async function captureWikiDocument(
   };
 }
 
-export async function addWikiSourceDocument(
+export function captureWikiDocument(config: ResolvedThothConfig, input: WikiCaptureInput): Promise<WikiCaptureResult> {
+  return withWorkspaceLock(config.resolvedWikiPath, () => captureWikiDocumentUnsafe(config, input));
+}
+
+async function addWikiSourceDocumentUnsafe(
   config: ResolvedThothConfig,
   input: WikiSourceAddInput,
 ): Promise<WikiCaptureResult> {
@@ -482,7 +492,7 @@ export async function addWikiSourceDocument(
     content: input.content,
     date: currentDate(),
   });
-  const result = await writeFileIfMissing(filePath, markdown);
+  const result = await writeFileIfMissing(filePath, markdown, { workspaceRoot: config.resolvedWikiPath });
 
   return {
     id,
@@ -494,7 +504,11 @@ export async function addWikiSourceDocument(
   };
 }
 
-export async function updateWikiDocument(
+export function addWikiSourceDocument(config: ResolvedThothConfig, input: WikiSourceAddInput): Promise<WikiCaptureResult> {
+  return withWorkspaceLock(config.resolvedWikiPath, () => addWikiSourceDocumentUnsafe(config, input));
+}
+
+async function updateWikiDocumentUnsafe(
   config: ResolvedThothConfig,
   input: WikiUpdateInput,
 ): Promise<WikiUpdateResult> {
@@ -530,7 +544,7 @@ export async function updateWikiDocument(
 
   await assertValidUpdatedDocumentRelations(config.resolvedWikiPath, input.id, metadata);
 
-  await writeFile(located.path, matter.stringify(parsed.content, metadata), "utf8");
+  await atomicWriteFile(located.path, matter.stringify(parsed.content, metadata), { workspaceRoot: config.resolvedWikiPath });
 
   const updatedDocument = await readWikiDocument(config.resolvedWikiPath, located.path);
 
@@ -544,7 +558,11 @@ export async function updateWikiDocument(
   };
 }
 
-export async function appendWikiDocument(
+export function updateWikiDocument(config: ResolvedThothConfig, input: WikiUpdateInput): Promise<WikiUpdateResult> {
+  return withWorkspaceLock(config.resolvedWikiPath, () => updateWikiDocumentUnsafe(config, input));
+}
+
+async function appendWikiDocumentUnsafe(
   config: ResolvedThothConfig,
   input: WikiAppendInput,
 ): Promise<WikiAppendResult> {
@@ -562,7 +580,7 @@ export async function appendWikiDocument(
   normalizeDateMetadata(metadata);
   metadata.updated_at = currentDate();
 
-  await writeFile(located.path, matter.stringify(content, metadata), "utf8");
+  await atomicWriteFile(located.path, matter.stringify(content, metadata), { workspaceRoot: config.resolvedWikiPath });
 
   return {
     id: input.id,
@@ -571,7 +589,11 @@ export async function appendWikiDocument(
   };
 }
 
-export async function appendLogEntry(
+export function appendWikiDocument(config: ResolvedThothConfig, input: WikiAppendInput): Promise<WikiAppendResult> {
+  return withWorkspaceLock(config.resolvedWikiPath, () => appendWikiDocumentUnsafe(config, input));
+}
+
+async function appendLogEntryUnsafe(
   config: ResolvedThothConfig,
   input: WikiLogInput,
 ): Promise<WikiLogResult> {
@@ -594,8 +616,11 @@ export async function appendLogEntry(
   const entry = createLogEntryMarkdown({ content, kind, ref: input.ref });
 
   const globalPath = path.join(config.resolvedWikiPath, "log.md");
-  await writeFileIfMissing(globalPath, createWikiLog());
-  await appendTextToFile(globalPath, entry);
+  const globalBase = await pathExists(globalPath) ? await readFile(globalPath, "utf8") : createWikiLog();
+  const batch: { filePath: string; content: string }[] = [{
+    filePath: globalPath,
+    content: appendLogText(globalBase, entry),
+  }];
 
   let timelinePath: string | undefined;
 
@@ -606,18 +631,19 @@ export async function appendLogEntry(
     );
     const timelineFilePath = path.join(config.resolvedWikiPath, timelineRelativePath);
 
-    await writeFileIfMissing(
-      timelineFilePath,
-      createTimelineMarkdown({
+    const timelineBase = await pathExists(timelineFilePath)
+      ? await readFile(timelineFilePath, "utf8")
+      : createTimelineMarkdown({
         id: `timeline-${projectId}`,
         title: `Timeline ${projectId}`,
         projectId,
         date: currentDate(),
-      }),
-    );
-    await appendTextToFile(timelineFilePath, entry);
+      });
+    batch.push({ filePath: timelineFilePath, content: appendLogText(timelineBase, entry) });
     timelinePath = timelineRelativePath;
   }
+
+  await atomicWriteBatch(batch, { workspaceRoot: config.resolvedWikiPath });
 
   return {
     globalPath: path.relative(config.resolvedWikiPath, globalPath),
@@ -626,7 +652,16 @@ export async function appendLogEntry(
   };
 }
 
-export async function relateWikiDocuments(
+function appendLogText(existing: string, entry: string): string {
+  const base = existing.trimEnd();
+  return `${base}${base.length > 0 ? "\n\n" : ""}${entry.trim()}\n`;
+}
+
+export function appendLogEntry(config: ResolvedThothConfig, input: WikiLogInput): Promise<WikiLogResult> {
+  return withWorkspaceLock(config.resolvedWikiPath, () => appendLogEntryUnsafe(config, input));
+}
+
+async function relateWikiDocumentsUnsafe(
   config: ResolvedThothConfig,
   input: WikiRelateInput,
 ): Promise<WikiRelateResult> {
@@ -642,38 +677,46 @@ export async function relateWikiDocuments(
     throw new Error(`Target document not found: ${input.targetId}`);
   }
 
-  const parsed = matter(source.document.raw);
-  const metadata = { ...(parsed.data as Record<string, unknown>) };
-  assertValidRelationType(input.relation);
-  assertValidSourceRelation(input.relation, source.document, target.document);
-  const relations = readRelations(metadata.related);
-  const exists = relations.some(
-    (relation) => relation.id === input.targetId && relation.relation === input.relation,
-  );
-
-  if (!exists) {
-    metadata.related = [...relations, { id: input.targetId, relation: input.relation }];
-    normalizeDateMetadata(metadata);
-    metadata.updated_at = currentDate();
-    const content = appendMarkdownRelation(parsed.content, {
-      relation: input.relation,
-      targetTitle: target.document.title,
-      targetPath: path.relative(path.dirname(source.path), target.path),
-    });
-
-    await writeFile(source.path, matter.stringify(content, metadata), "utf8");
-  }
+  const update = prepareRelationUpdate(source, target, input);
+  if (update.content !== undefined) await atomicWriteFile(source.path, update.content, { workspaceRoot: config.resolvedWikiPath });
 
   return {
     source: input.sourceId,
     target: input.targetId,
     relation: input.relation,
     path: source.document.path,
-    created: !exists,
+    created: update.created,
   };
 }
 
-export async function linkWikiSourceDocument(
+function prepareRelationUpdate(
+  source: { path: string; document: WikiDocument },
+  target: { path: string; document: WikiDocument },
+  input: WikiRelateInput,
+): { created: boolean; content?: string } {
+  const parsed = matter(source.document.raw);
+  const metadata = { ...(parsed.data as Record<string, unknown>) };
+  assertValidRelationType(input.relation);
+  assertValidSourceRelation(input.relation, source.document, target.document);
+  const relations = readRelations(metadata.related);
+  const exists = relations.some((relation) => relation.id === input.targetId && relation.relation === input.relation);
+  if (exists) return { created: false };
+  metadata.related = [...relations, { id: input.targetId, relation: input.relation }];
+  normalizeDateMetadata(metadata);
+  metadata.updated_at = currentDate();
+  const content = appendMarkdownRelation(parsed.content, {
+    relation: input.relation,
+    targetTitle: target.document.title,
+    targetPath: path.relative(path.dirname(source.path), target.path),
+  });
+  return { created: true, content: matter.stringify(content, metadata) };
+}
+
+export function relateWikiDocuments(config: ResolvedThothConfig, input: WikiRelateInput): Promise<WikiRelateResult> {
+  return withWorkspaceLock(config.resolvedWikiPath, () => relateWikiDocumentsUnsafe(config, input));
+}
+
+async function linkWikiSourceDocumentUnsafe(
   config: ResolvedThothConfig,
   sourceId: string,
   targetId: string,
@@ -694,16 +737,36 @@ export async function linkWikiSourceDocument(
     throw new Error(`Target document not found: ${targetId}`);
   }
 
-  const sourceRelation = await relateWikiDocuments(config, {
+  const sourceUpdate = prepareRelationUpdate(source, target, {
     sourceId,
     targetId,
     relation: "source_for",
   });
-  const targetRelation = await relateWikiDocuments(config, {
+  const targetUpdate = prepareRelationUpdate(target, source, {
     sourceId: targetId,
     targetId: sourceId,
     relation: "derived_from",
   });
+  const batch = [
+    ...(sourceUpdate.content === undefined ? [] : [{ filePath: source.path, content: sourceUpdate.content }]),
+    ...(targetUpdate.content === undefined ? [] : [{ filePath: target.path, content: targetUpdate.content }]),
+  ];
+  await atomicWriteBatch(batch, { workspaceRoot: config.resolvedWikiPath });
+
+  const sourceRelation = {
+    source: sourceId,
+    target: targetId,
+    relation: "source_for" as const,
+    path: source.document.path,
+    created: sourceUpdate.created,
+  };
+  const targetRelation = {
+    source: targetId,
+    target: sourceId,
+    relation: "derived_from" as const,
+    path: target.document.path,
+    created: targetUpdate.created,
+  };
 
   return {
     source: sourceId,
@@ -711,6 +774,10 @@ export async function linkWikiSourceDocument(
     sourceRelation,
     targetRelation,
   };
+}
+
+export function linkWikiSourceDocument(config: ResolvedThothConfig, sourceId: string, targetId: string): Promise<WikiSourceLinkResult> {
+  return withWorkspaceLock(config.resolvedWikiPath, () => linkWikiSourceDocumentUnsafe(config, sourceId, targetId));
 }
 
 export async function searchWikiDocuments(
@@ -778,7 +845,7 @@ export async function searchWikiDocuments(
   return results.sort((left, right) => left.path.localeCompare(right.path));
 }
 
-export async function rebuildWikiIndex(
+async function rebuildWikiIndexUnsafe(
   config: ResolvedThothConfig,
 ): Promise<WikiIndexResult> {
   await ensureDirectory(path.join(config.resolvedWikiPath, ".thoth"));
@@ -831,15 +898,15 @@ export async function rebuildWikiIndex(
   const indexPath = path.join(config.resolvedWikiPath, ".thoth", "index.json");
   const relationsPath = path.join(config.resolvedWikiPath, ".thoth", "relations.json");
 
-  await writeFile(
+  await atomicWriteFile(
     indexPath,
     `${JSON.stringify({ documents, warnings }, null, 2)}\n`,
-    "utf8",
+    { workspaceRoot: config.resolvedWikiPath },
   );
-  await writeFile(
+  await atomicWriteFile(
     relationsPath,
     `${JSON.stringify({ relations, warnings }, null, 2)}\n`,
-    "utf8",
+    { workspaceRoot: config.resolvedWikiPath },
   );
 
   return {
@@ -851,7 +918,11 @@ export async function rebuildWikiIndex(
   };
 }
 
-export async function rebuildHumanWikiIndex(
+export function rebuildWikiIndex(config: ResolvedThothConfig): Promise<WikiIndexResult> {
+  return withWorkspaceLock(config.resolvedWikiPath, () => rebuildWikiIndexUnsafe(config));
+}
+
+async function rebuildHumanWikiIndexUnsafe(
   config: ResolvedThothConfig,
   options: WikiHumanIndexOptions = {},
 ): Promise<WikiHumanIndexResult> {
@@ -924,16 +995,16 @@ export async function rebuildHumanWikiIndex(
       const categoryDocuments = canonicalDocuments.filter((document) => document.type === type && (!options.type || document.type === options.type));
       if (categoryDocuments.length === 0) continue;
       const categoryPath = `index-${type}.md`;
-      await writeFile(
+      await atomicWriteFile(
         path.join(config.resolvedWikiPath, categoryPath),
         createHumanCategoryIndex(humanIndexSections.find((section) => section.type === type)?.heading ?? `${type[0]?.toUpperCase() ?? ""}${type.slice(1)}`, type, categoryDocuments, canonicalDocuments),
-        "utf8",
+        { workspaceRoot: config.resolvedWikiPath },
       );
       categoryPagePaths.push(categoryPath);
     }
   }
 
-  await writeFile(indexPath, createHumanWikiIndex(documents, categoryPagePaths, canonicalDocuments), "utf8");
+  await atomicWriteFile(indexPath, createHumanWikiIndex(documents, categoryPagePaths, canonicalDocuments), { workspaceRoot: config.resolvedWikiPath });
 
   return {
     documentsIndexed: documents.length,
@@ -943,7 +1014,11 @@ export async function rebuildHumanWikiIndex(
   };
 }
 
-export async function syncWikiRelationLinks(
+export function rebuildHumanWikiIndex(config: ResolvedThothConfig, options: WikiHumanIndexOptions = {}): Promise<WikiHumanIndexResult> {
+  return withWorkspaceLock(config.resolvedWikiPath, () => rebuildHumanWikiIndexUnsafe(config, options));
+}
+
+async function syncWikiRelationLinksUnsafe(
   config: ResolvedThothConfig,
 ): Promise<WikiSyncLinksResult> {
   if (!(await pathExists(config.resolvedWikiPath))) {
@@ -992,10 +1067,10 @@ export async function syncWikiRelationLinks(
     if (documentLinksCreated > 0) {
       normalizeDateMetadata(metadata);
       metadata.updated_at = currentDate();
-      await writeFile(
+      await atomicWriteFile(
         path.join(config.resolvedWikiPath, document.path),
         matter.stringify(content, metadata),
-        "utf8",
+        { workspaceRoot: config.resolvedWikiPath },
       );
       documentsUpdated += 1;
       linksCreated += documentLinksCreated;
@@ -1007,6 +1082,10 @@ export async function syncWikiRelationLinks(
     documentsUpdated,
     linksCreated,
   };
+}
+
+export function syncWikiRelationLinks(config: ResolvedThothConfig): Promise<WikiSyncLinksResult> {
+  return withWorkspaceLock(config.resolvedWikiPath, () => syncWikiRelationLinksUnsafe(config));
 }
 
 export async function lintWikiDocuments(

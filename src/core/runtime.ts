@@ -15,7 +15,7 @@ const intentActions: Record<string, CoreAction> = {
   source_add: "wiki.source.add", source_link: "wiki.source.link",
 };
 const writeActions = new Set<CoreAction>(["wiki.index", "wiki.capture", "wiki.update", "wiki.append", "wiki.relate", "wiki.log", "wiki.source.add", "wiki.source.link"]);
-const nonAtomicActions = new Set<CoreAction>(["wiki.index", "wiki.relate", "wiki.log", "wiki.source.link"]);
+const nonAtomicActions = new Set<CoreAction>(["wiki.index", "wiki.relate"]);
 const actionSet = new Set<CoreAction>([...Object.values(intentActions), ...writeActions]);
 const emptyFilter = z.preprocess((value) => value === "" ? undefined : value, z.string().min(1).optional());
 

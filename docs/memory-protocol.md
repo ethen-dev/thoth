@@ -320,6 +320,9 @@ Los pasos declaran `write: boolean`. `executePlan` nunca ejecuta un paso de
 escritura sin `{ confirmed: true }`; en ese caso devuelve `proposal` y no
 modifica la wiki. `query` usa recuperación resumida (`wiki-query`), con un
 máximo de 20 candidatos y snippets de 500 caracteres. El Core no interpreta
-lenguaje natural ni invoca proveedores, modelos, agentes o shell. `relate`,
-`log`, `index` y `source_link` se rechazan con `non_atomic_action`, porque sus
-handlers pueden escribir varios archivos; el Core no intenta rollback parcial.
+lenguaje natural ni invoca proveedores, modelos, agentes o shell. `relate` e
+`index` se rechazan con `non_atomic_action`; `log` y `source_link` usan batch
+con rollback antes de ejecutarse desde Core.
+Los índices humanos y `syncWikiRelationLinks` siguen siendo legacy fuera de
+Core y tampoco prometen atomicidad multiarchivo. Esta tarea no realiza
+migraciones automáticas de datos existentes.

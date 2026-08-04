@@ -52,7 +52,7 @@ describe("structured Core runtime", () => {
     ] };
     expect((await executePlan(config, multiWrite)).error?.code).toBe("non_atomic_plan");
     expect(planIntent(config, { intent: "relate", input: { sourceId: "a", targetId: "b", relation: "related_to" } }).error?.code).toBe("non_atomic_action");
-    expect(planIntent(config, { intent: "log", input: { content: "x" } }).error?.code).toBe("non_atomic_action");
+    expect(planIntent(config, { intent: "log", input: { content: "x" } }).steps[0]).toMatchObject({ action: "wiki.log", write: true });
     const tooLarge = { version: 1, intent: "list", status: "planned", confirmationRequired: false, steps: Array.from({ length: maxCorePlanSteps + 1 }, (_, index) => ({ id: `step-${index}`, action: "wiki.list", input: {}, write: false, summary: "list" })) };
     expect((await executePlan(config, tooLarge)).error?.code).toBe("plan_too_large");
   });

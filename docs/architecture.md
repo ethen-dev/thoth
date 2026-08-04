@@ -46,9 +46,25 @@ Responsabilidades iniciales:
 confirmación para writes y rechazan acciones no atómicas. La CLI y las tools
 MCP legacy siguen existiendo por compatibilidad y todavía no están migradas al
 Core; por tanto el Core no es una garantía global de toda la aplicación.
+
+Las mutaciones single-file usan escritura temporal en el mismo directorio,
+preservan los permisos existentes (o usan un modo definido para archivos
+nuevos), hacen `fsync` cuando el sistema lo permite y terminan con `rename`.
+El lock de workspace guarda pid, token y timestamp, aplica timeout y una
+política conservadora de stale locks; solo el token propietario puede limpiar
+su lock. La comprobación de symlinks es deliberadamente preventiva: queda una
+ventana TOCTOU residual que requeriría APIs específicas de openat/O_NOFOLLOW
+para eliminar por completo.
+
+`appendLogEntry` y `linkWikiSourceDocument` usan batch con snapshots y rollback
+y sus acciones Core pueden ejecutarse tras confirmación. Los índices
+técnicos/humanos y la sincronización de enlaces siguen siendo legacy sin
+atomicidad multiarchivo; `wiki.index` continúa rechazado por Core y las
+operaciones human/sync no forman parte de su allowlist.
+Esta tarea no realiza migraciones automáticas de datos.
 Cada plan admite como máximo 20 pasos; los planes mayores se rechazan antes de
-ejecutar cualquier paso. `relate`, `log`, `index` y `source_link` aparecen en
-el contrato para ser rechazados como no atómicos hasta disponer de transacciones.
+ejecutar cualquier paso. `relate` e `index` siguen rechazados como no atómicos;
+`log` y `source_link` disponen ahora de batch con rollback.
 
 En particular, `wiki_show` y los resources MCP son superficies legacy de lectura
 intencional: pueden devolver `content`, `raw` o `metadata` bajo demanda. Esa
