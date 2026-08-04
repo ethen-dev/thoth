@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "agents": [
+    {
+      "id": "thoth-memory",
+      "path": "opencode/agents/thoth-memory.md",
+      "runtime": "opencode",
+      "category": "memory",
+      "status": "active",
+      "source": "internal",
+      "when_to_use": "Primary memory orchestration, recall, writing, and project intake."
+    },
+    {
+      "id": "thoth-archivist",
+      "path": "opencode/agents/thoth-archivist.md",
+      "runtime": "opencode",
+      "category": "memory",
+      "status": "active",
+      "source": "internal",
+      "when_to_use": "Read project documentation and extract durable facts."
+    },
+    {
+      "id": "thoth-indexer",
+      "path": "opencode/agents/thoth-indexer.md",
+      "runtime": "opencode",
+      "category": "memory",
+      "status": "active",
+      "source": "internal",
+      "when_to_use": "Map structure, relations, indexes, duplicates, and gaps."
+    },
+    {
+      "id": "thoth-scribe",
+      "path": "opencode/agents/thoth-scribe.md",
+      "runtime": "opencode",
+      "category": "memory",
+      "status": "active",
+      "source": "internal",
+      "when_to_use": "Write approved durable memory using T.H.O.T.H. commands."
+    },
+    {
+      "id": "thoth-critic",
+      "path": "opencode/agents/thoth-critic.md",
+      "runtime": "opencode",
+      "category": "memory",
+      "status": "active",
+      "source": "internal",
+      "when_to_use": "Review memory quality, privacy, ambiguity, and structure."
+    },
+    {
+      "id": "thoth-dev-router",
+      "path": "opencode/agents/thoth-dev-router.md",
+      "runtime": "opencode",
+      "category": "development",
+      "status": "temporary",
+      "source": "internal",
+      "when_to_use": "Route development requests to the smallest useful workflow."
+    },
+    {
+      "id": "thoth-dev-explorer",
+      "path": "opencode/agents/thoth-dev-explorer.md",
+      "runtime": "opencode",
+      "category": "development",
+      "status": "temporary",
+      "source": "internal",
+      "when_to_use": "Explore codebase context before non-trivial implementation."
+    },
+    {
+      "id": "thoth-dev-implementer",
+      "path": "opencode/agents/thoth-dev-implementer.md",
+      "runtime": "opencode",
+      "category": "development",
+      "status": "temporary",
+      "source": "internal",
+      "when_to_use": "Implement focused development changes after context is clear."
+    },
+    {
+      "id": "thoth-dev-reviewer",
+      "path": "opencode/agents/thoth-dev-reviewer.md",
+      "runtime": "opencode",
+      "category": "development",
+      "status": "temporary",
+      "source": "internal",
+      "when_to_use": "Review implemented changes for bugs and regressions."
+    },
+    {
+      "id": "thoth-dev-verifier",
+      "path": "opencode/agents/thoth-dev-verifier.md",
+      "runtime": "opencode",
+      "category": "development",
+      "status": "temporary",
+      "source": "internal",
+      "when_to_use": "Run verification commands and report evidence."
+    },
+    {
+      "id": "thoth-dev-receipt",
+      "path": "opencode/agents/thoth-dev-receipt.md",
+      "runtime": "opencode",
+      "category": "development",
+      "status": "temporary",
+      "source": "internal",
+      "when_to_use": "Produce concise delivery receipts for development work."
+    }
+  ]
+}

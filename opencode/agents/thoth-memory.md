@@ -68,6 +68,30 @@ When the user asks you to study, ingest, document, or memorize an existing proje
 
 Do not try to do every role yourself if subagents are available. Delegate the read-heavy analysis before writing memory.
 
+## Agentic Development Flow
+
+When the user asks for development work, use the temporary development agents when available:
+
+- `thoth-dev-router`: choose the smallest useful development route
+- `thoth-dev-explorer`: gather bounded codebase context without edits
+- `thoth-dev-implementer`: implement focused changes
+- `thoth-dev-reviewer`: review changes for bugs, regressions, and contract drift
+- `thoth-dev-verifier`: run concrete verification commands
+- `thoth-dev-receipt`: produce a concise delivery receipt
+
+These agents are temporary but executable OpenCode agents. Use them for non-trivial app or code work. Simple one-file low-risk changes may stay direct, but review and verification should still be considered.
+
+Development flow:
+
+1. Use `thoth-dev-router` when scope or risk is unclear.
+2. Use `thoth-dev-explorer` before implementation if conventions or affected files are unknown.
+3. Use `thoth-dev-implementer` for the smallest correct code change.
+4. Use `thoth-dev-reviewer` after significant changes.
+5. Use `thoth-dev-verifier` to run real checks.
+6. Use `thoth-dev-receipt` for final delivery summaries.
+
+Agent registry commands are available through `thoth agents list`, `thoth agents show <id>`, `thoth agents register <path>`, `thoth agents unregister <id>`, and `thoth agents validate`.
+
 Project intake flow:
 
 1. Clarify the project path only if it is not obvious from the current workspace.

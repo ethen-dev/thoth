@@ -11,7 +11,14 @@ const subagentPaths = [
   join(root, "opencode", "agents", "thoth-indexer.md"),
   join(root, "opencode", "agents", "thoth-scribe.md"),
   join(root, "opencode", "agents", "thoth-critic.md"),
+  join(root, "opencode", "agents", "thoth-dev-router.md"),
+  join(root, "opencode", "agents", "thoth-dev-explorer.md"),
+  join(root, "opencode", "agents", "thoth-dev-implementer.md"),
+  join(root, "opencode", "agents", "thoth-dev-reviewer.md"),
+  join(root, "opencode", "agents", "thoth-dev-verifier.md"),
+  join(root, "opencode", "agents", "thoth-dev-receipt.md"),
 ];
+const agentRegistryPath = join(root, "agents", "registry.json");
 const autonomousMemoryDocPath = join(root, "docs", "autonomous-memory.md");
 const macThothInstallerPath = join(root, "opencode", "install", "install-thoth.command");
 const macAgentInstallerPath = join(root, "opencode", "install", "install-opencode-agent.command");
@@ -36,6 +43,13 @@ const requiredAgentSnippets = [
   "thoth-indexer",
   "thoth-scribe",
   "thoth-critic",
+  "thoth-dev-router",
+  "thoth-dev-explorer",
+  "thoth-dev-implementer",
+  "thoth-dev-reviewer",
+  "thoth-dev-verifier",
+  "thoth-dev-receipt",
+  "thoth agents list",
   "study and memorize this project",
   "session log",
   "thoth index --human",
@@ -79,6 +93,8 @@ const requiredReadmeSnippets = [
   "thoth-indexer",
   "thoth-scribe",
   "thoth-critic",
+  "Development Agent Flow",
+  "thoth agents register",
   "session log",
   "thoth index --human",
   "thoth sync-links",
@@ -89,9 +105,7 @@ const requiredReadmeSnippets = [
 
 const requiredSubagentSnippets = [
   "mode: subagent",
-  "edit: deny",
   "\"*\": ask",
-  "thoth search*",
 ];
 
 const requiredAutonomousMemoryDocSnippets = [
@@ -157,6 +171,7 @@ function findCommand(commands) {
 await Promise.all([
   assertFile(agentPath),
   ...subagentPaths.map((path) => assertFile(path)),
+  assertFile(agentRegistryPath),
   assertFile(autonomousMemoryDocPath),
   assertFile(macThothInstallerPath),
   assertFile(macAgentInstallerPath),
@@ -191,6 +206,9 @@ for (const [index, subagent] of subagents.entries()) {
   assertIncludes(subagent, requiredSubagentSnippets, `OpenCode subagent ${subagentPaths[index]}`);
 }
 
+const agentRegistry = await readFile(agentRegistryPath, "utf8");
+assertIncludes(agentRegistry, ["thoth-memory", "thoth-dev-router", "thoth-dev-verifier", "temporary"], "Agent registry");
+
 run("zsh", ["-n", macThothInstallerPath]);
 run("zsh", ["-n", macAgentInstallerPath]);
 run("zsh", ["-n", macUpdaterPath]);
@@ -206,10 +224,10 @@ const linuxAgentDryRun = run(linuxAgentInstallerPath, ["--dry-run"]);
 const linuxUpdaterDryRun = run(linuxUpdaterPath, ["--dry-run", "--skip-pull"]);
 
 assertIncludes(macThothDryRun, ["DRY RUN", "install dependencies", "thoth init", "thoth doctor"], "macOS T.H.O.T.H. installer dry-run");
-assertIncludes(macAgentDryRun, ["DRY RUN", "thoth-memory.md", "thoth-archivist.md", "thoth-critic.md"], "macOS OpenCode agent installer dry-run");
+assertIncludes(macAgentDryRun, ["DRY RUN", "thoth-memory.md", "thoth-archivist.md", "thoth-critic.md", "thoth-dev-router.md"], "macOS OpenCode agent installer dry-run");
 assertIncludes(macUpdaterDryRun, ["DRY RUN", "Skipping git pull", "install-thoth.command", "install-opencode-agent.command"], "macOS updater dry-run");
 assertIncludes(linuxThothDryRun, ["DRY RUN", "install dependencies", "thoth init", "thoth doctor"], "Linux T.H.O.T.H. installer dry-run");
-assertIncludes(linuxAgentDryRun, ["DRY RUN", "thoth-memory.md", "thoth-archivist.md", "thoth-critic.md"], "Linux OpenCode agent installer dry-run");
+assertIncludes(linuxAgentDryRun, ["DRY RUN", "thoth-memory.md", "thoth-archivist.md", "thoth-critic.md", "thoth-dev-router.md"], "Linux OpenCode agent installer dry-run");
 assertIncludes(linuxUpdaterDryRun, ["DRY RUN", "Skipping git pull", "install-thoth.sh", "install-opencode-agent.sh"], "Linux updater dry-run");
 
 const windowsThothInstaller = await readFile(windowsThothInstallerPath, "utf8");

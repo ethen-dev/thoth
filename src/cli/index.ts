@@ -2,6 +2,13 @@
 
 import { Command } from "commander";
 import {
+  getAgent,
+  listAgents,
+  registerExternalAgent,
+  unregisterExternalAgent,
+  validateAgents,
+} from "../agents/index.js";
+import {
   appendWikiDocument,
   captureWikiDocument,
   getWikiDocumentById,
@@ -19,7 +26,7 @@ import {
 } from "../actions/index.js";
 import { loadConfig } from "../core/index.js";
 
-const thothVersion = "0.5.0";
+const thothVersion = "0.6.0";
 const program = new Command();
 
 program
@@ -396,6 +403,103 @@ program
       if (!result.ok) {
         process.exitCode = 1;
       }
+    } catch (error) {
+      reportError(error);
+    }
+  });
+
+const agents = program
+  .command("agents")
+  .description("Manage T.H.O.T.H. agent registries");
+
+agents
+  .command("list")
+  .description("List registered agents")
+  .option("--source <source>", "Filter by source: internal or external")
+  .option("--category <category>", "Filter by category")
+  .action(async (options: { source?: "internal" | "external"; category?: string }) => {
+    try {
+      const config = await loadConfig();
+      const results = await listAgents(config, options);
+
+      for (const agent of results) {
+        console.log(`${agent.id}\t${agent.source}\t${agent.runtime}\t${agent.category}\t${agent.status}\t${agent.path}`);
+      }
+    } catch (error) {
+      reportError(error);
+    }
+  });
+
+agents
+  .command("show")
+  .description("Show a registered agent")
+  .argument("<id>", "Agent id")
+  .action(async (id: string) => {
+    try {
+      const config = await loadConfig();
+      const agent = await getAgent(config, id);
+
+      if (!agent) {
+        throw new Error(`Agent not found: ${id}`);
+      }
+
+      console.log(JSON.stringify(agent, null, 2));
+    } catch (error) {
+      reportError(error);
+    }
+  });
+
+agents
+  .command("register")
+  .description("Register an external Markdown agent")
+  .argument("<path>", "Path to agent Markdown file")
+  .action(async (agentPath: string) => {
+    try {
+      const config = await loadConfig();
+      const agent = await registerExternalAgent(config, agentPath);
+
+      console.log(`Registered: ${agent.id}`);
+      console.log(`Path: ${agent.path}`);
+    } catch (error) {
+      reportError(error);
+    }
+  });
+
+agents
+  .command("unregister")
+  .description("Unregister an external agent")
+  .argument("<id>", "Agent id")
+  .action(async (id: string) => {
+    try {
+      const config = await loadConfig();
+      const removed = await unregisterExternalAgent(config, id);
+
+      console.log(removed ? `Unregistered: ${id}` : `Agent not found: ${id}`);
+    } catch (error) {
+      reportError(error);
+    }
+  });
+
+agents
+  .command("validate")
+  .description("Validate registered agents")
+  .action(async () => {
+    try {
+      const config = await loadConfig();
+      const result = await validateAgents(config);
+
+      console.log(`Agents checked: ${result.agentsChecked}`);
+
+      if (result.issues.length === 0) {
+        console.log("Issues: none");
+        return;
+      }
+
+      console.log(`Issues: ${result.issues.length}`);
+      for (const issue of result.issues) {
+        console.log(`- ${issue.id} (${issue.path}): ${issue.message}`);
+      }
+      process.exitCode = 1;
     } catch (error) {
       reportError(error);
     }

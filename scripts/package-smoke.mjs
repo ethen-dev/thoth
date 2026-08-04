@@ -45,6 +45,8 @@ try {
   });
   await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "index", "--human"], workspacePath);
   await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "sync-links"], workspacePath);
+  await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "agents", "list"], workspacePath);
+  await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "agents", "validate"], workspacePath);
   await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "doctor"], workspacePath);
 
   await rm(tarballPath, { force: true });

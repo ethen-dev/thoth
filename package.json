@@ -1,6 +1,6 @@
 {
   "name": "thoth",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "T.H.O.T.H. - Transversal Heuristic Organizer of Trusted History",
   "type": "module",
   "bin": {
@@ -8,6 +8,7 @@
     "thoth-mcp": "dist/mcp/server.js"
   },
   "files": [
+    "agents",
     "dist",
     "opencode",
     "schemas"

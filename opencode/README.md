@@ -136,6 +136,33 @@ Read-only project inspection is allowed to reduce permission prompts. Memory wri
 
 All memory writes should pass through `thoth-scribe` or its writing rules, even for small decisions. The agent should create explicit relations with `thoth relate` when source, target, and relation type are clear. The index is only a generated navigation view; relationships should live in document frontmatter and be mirrored as Markdown links in `## Relations` with `thoth sync-links`. After a project study session that writes memory, the agent should also create or update a session log and run `thoth sync-links` plus `thoth index --human`. Its final response should mention saved documents, explicit relations, link sync status, log status, derived index status, human index status, and unresolved questions.
 
+## Development Agent Flow
+
+T.H.O.T.H. also installs temporary OpenCode development agents:
+
+- `thoth-dev-router`
+- `thoth-dev-explorer`
+- `thoth-dev-implementer`
+- `thoth-dev-reviewer`
+- `thoth-dev-verifier`
+- `thoth-dev-receipt`
+
+Use them for application development work. The primary `thoth-memory` agent can delegate to them for routing, exploration, implementation, review, verification, and delivery receipts.
+
+The local agent registry can be inspected with:
+
+```sh
+thoth agents list
+thoth agents validate
+```
+
+External user agents can be registered without committing them to T.H.O.T.H.:
+
+```sh
+thoth agents register /path/to/my-agent.md
+thoth agents list --source external
+```
+
 ## Where Your Memory Lives
 
 Your memory is plain Markdown on your computer:
