@@ -15,6 +15,7 @@ Capacidades:
 - IDs estables
 - tipos de documento iniciales
 - relaciones declaradas en metadatos
+- log global append-only (`log.md`) y timelines por proyecto en `timelines/`
 - CLI basica para inicializar, capturar, listar y mostrar documentos
 - MCP basico para captura y consulta desde conversaciones LLM
 

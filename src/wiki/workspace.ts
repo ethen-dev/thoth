@@ -5,7 +5,12 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import type { AnySchema, ErrorObject, ValidateFunction } from "ajv";
 import matter from "gray-matter";
 import type { ResolvedThothConfig } from "../core/config.js";
-import { ensureDirectory, pathExists, writeFileIfMissing } from "../storage/index.js";
+import {
+  appendTextToFile,
+  ensureDirectory,
+  pathExists,
+  writeFileIfMissing,
+} from "../storage/index.js";
 
 const wikiDirectories = [
   ".thoth",
@@ -100,9 +105,24 @@ export const validWikiRelationTypes = [
   "has_verification",
 ] as const;
 
+export const validLogKinds = [
+  "implementation",
+  "decision",
+  "discovery",
+  "structure",
+  "fix",
+  "environment",
+  "correction",
+  "verification",
+  "maintenance",
+  "version",
+  "log",
+] as const;
+
 const validWikiDocumentTypeSet = new Set<string>(validWikiDocumentTypes);
 const validWikiCaptureDocumentTypeSet = new Set<string>(validWikiCaptureDocumentTypes);
 const validWikiRelationTypeSet = new Set<string>(validWikiRelationTypes);
+const validLogKindSet = new Set<string>(validLogKinds);
 
 export type WikiStatus = {
   workspacePath: string;
@@ -116,6 +136,7 @@ export type WikiStatus = {
 export type WikiInitResult = WikiStatus & {
   createdDirectories: string[];
   index: "created" | "exists";
+  log: "created" | "exists";
 };
 
 export type WikiDocumentSummary = {
@@ -199,6 +220,19 @@ export type WikiAppendResult = {
   id: string;
   path: string;
   section: string;
+};
+
+export type WikiLogInput = {
+  content: string;
+  kind?: string;
+  projectId?: string;
+  ref?: string;
+};
+
+export type WikiLogResult = {
+  globalPath: string;
+  timelinePath?: string;
+  entry: string;
 };
 
 export type WikiRelateInput = {
@@ -312,12 +346,18 @@ export async function initializeWiki(
     createWikiIndex(),
   );
 
+  const log = await writeFileIfMissing(
+    path.join(config.resolvedWikiPath, "log.md"),
+    createWikiLog(),
+  );
+
   const status = await getWikiStatus(config);
 
   return {
     ...status,
     createdDirectories,
     index,
+    log,
   };
 }
 
@@ -503,6 +543,61 @@ export async function appendWikiDocument(
     id: input.id,
     path: located.document.path,
     section,
+  };
+}
+
+export async function appendLogEntry(
+  config: ResolvedThothConfig,
+  input: WikiLogInput,
+): Promise<WikiLogResult> {
+  const content = input.content.trim();
+
+  if (!content) {
+    throw new Error("Log content is required");
+  }
+
+  const kind = input.kind ?? "log";
+  assertValidLogKind(kind);
+
+  let projectId: string | undefined;
+
+  if (input.projectId) {
+    await assertProjectExists(config, input.projectId);
+    projectId = input.projectId;
+  }
+
+  const entry = createLogEntryMarkdown({ content, kind, ref: input.ref });
+
+  const globalPath = path.join(config.resolvedWikiPath, "log.md");
+  await writeFileIfMissing(globalPath, createWikiLog());
+  await appendTextToFile(globalPath, entry);
+
+  let timelinePath: string | undefined;
+
+  if (projectId) {
+    const timelineRelativePath = path.join(
+      directoryForType("timeline"),
+      `timeline-${projectId}.md`,
+    );
+    const timelineFilePath = path.join(config.resolvedWikiPath, timelineRelativePath);
+
+    await writeFileIfMissing(
+      timelineFilePath,
+      createTimelineMarkdown({
+        id: `timeline-${projectId}`,
+        title: `Timeline ${projectId}`,
+        projectId,
+        date: currentDate(),
+      }),
+    );
+    await appendTextToFile(timelineFilePath, entry);
+    timelinePath = timelineRelativePath;
+  }
+
+  return {
+    globalPath: path.relative(config.resolvedWikiPath, globalPath),
+    timelinePath,
+    entry,
   };
 }
 
@@ -715,7 +810,7 @@ export async function rebuildHumanWikiIndex(
   const documents = (await Promise.all(
     markdownPaths.map((markdownPath) => readWikiDocument(config.resolvedWikiPath, markdownPath)),
   ))
-    .filter((document) => document.id !== "wiki-index")
+    .filter((document) => !document.id.startsWith("wiki-"))
     .sort((left, right) => {
       const typeOrder = humanIndexSections.findIndex((section) => section.type === left.type)
         - humanIndexSections.findIndex((section) => section.type === right.type);
@@ -1327,6 +1422,65 @@ ${input.content}
 `;
 }
 
+function createWikiLog(): string {
+  const now = currentDate();
+
+  return `---
+id: wiki-log
+title: T.H.O.T.H. Global Log
+type: reference
+status: active
+created_at: ${now}
+updated_at: ${now}
+source: generated
+related: []
+---
+
+# T.H.O.T.H. Global Log
+`;
+}
+
+function createLogEntryMarkdown(input: {
+  content: string;
+  kind: string;
+  ref?: string;
+}): string {
+  const date = currentDate();
+  const lines = input.content
+    .trim()
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const firstLine = lines[0] ?? "";
+  const body = lines.map((line) => `- ${line}`).join("\n");
+  const reference = input.ref ? `\n- Reference: [[${input.ref}]]` : "";
+
+  return `## [${date}] ${input.kind} | ${firstLine}\n\n${body}${reference}`;
+}
+
+function createTimelineMarkdown(input: {
+  id: string;
+  title: string;
+  projectId: string;
+  date: string;
+}): string {
+  return `---
+id: ${yamlString(input.id)}
+title: ${yamlString(input.title)}
+type: timeline
+status: active
+created_at: ${input.date}
+updated_at: ${input.date}
+source: manual
+related:
+  - id: ${yamlString(input.projectId)}
+    relation: belongs_to
+---
+
+# ${input.title}
+`;
+}
+
 function currentDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -1397,6 +1551,23 @@ function assertValidCaptureDocumentType(type: string): void {
 function assertValidRelationType(relation: string): void {
   if (!validWikiRelationTypeSet.has(relation)) {
     throw new Error(`Invalid relation type: ${relation}`);
+  }
+}
+
+function assertValidLogKind(kind: string): void {
+  if (!validLogKindSet.has(kind)) {
+    throw new Error(`Invalid log kind: ${kind}`);
+  }
+}
+
+async function assertProjectExists(
+  config: ResolvedThothConfig,
+  projectId: string,
+): Promise<void> {
+  const located = await findWikiDocumentById(config.resolvedWikiPath, projectId);
+
+  if (!located || located.document.type !== "project") {
+    throw new Error(`Project document not found: ${projectId} (expected type project)`);
   }
 }
 

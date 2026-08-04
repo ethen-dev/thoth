@@ -94,8 +94,9 @@ Herramientas implementadas inicialmente:
 - `wiki_relate`
 - `wiki_index`
 - `wiki_lint`
+- `wiki_log`
 
-Todas reutilizan las acciones internas compartidas con la CLI. `wiki_capture` no acepta `type: source`; las fuentes raw deben entrar por el flujo `source add` de la CLI.
+Todas reutilizan las acciones internas compartidas con la CLI. `wiki_capture` no acepta `type: source`; las fuentes raw deben entrar por el flujo `source add` de la CLI. `wiki_log` anade una entrada al log global y, con `project`, tambien a la timeline del proyecto.
 
 Resources implementados inicialmente:
 

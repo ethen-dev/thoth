@@ -288,6 +288,26 @@ Responsabilidades:
 - actualizar `updated_at`
 - preservar frontmatter y cuerpo existente
 
+### thoth log
+
+Agrega una entrada al log global y, opcionalmente, a la timeline de un proyecto.
+
+Ejemplos:
+
+```bash
+thoth log "Primera nota durable"
+thoth log "Milestone alcanzado" --kind decision --project project-thoth
+thoth log "Detalle con referencia" --ref note-example
+```
+
+Responsabilidades:
+
+- escribir en `log.md` global (append-only) una entrada con prefijo parseable `## [YYYY-MM-DD] <kind> | <resumen>`
+- aceptar `--kind` del catalogo de tipos de log (`implementation`, `decision`, `discovery`, `structure`, `fix`, `environment`, `correction`, `verification`, `maintenance`, `version`, `log`)
+- con `--project <id>`, validar que el proyecto exista y escribir la misma entrada en `timelines/timeline-<project-id>.md` con relacion `belongs_to`
+- con `--ref <id>`, anadir un bullet `- Reference: [[<id>]]` a la entrada
+- imprimir la ruta global, la ruta de timeline si aplica y el id de proyecto
+
 ### thoth relate
 
 Crea una relacion explicita entre dos documentos existentes.

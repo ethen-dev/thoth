@@ -65,6 +65,7 @@ describe("MCP server", () => {
           "wiki_relate",
           "wiki_index",
           "wiki_lint",
+          "wiki_log",
         ]),
       );
       expect(lintResult.content[0]).toMatchObject({ type: "text" });
@@ -80,7 +81,7 @@ describe("MCP server", () => {
       expect(wikiCaptureTypeSchema?.enum).not.toContain("source");
       expect(wikiUpdateTypeSchema?.enum).toContain("source");
       expect(JSON.parse(lintResult.content[0]?.type === "text" ? lintResult.content[0].text : "{}"))
-        .toMatchObject({ documentsChecked: 1, issues: [] });
+        .toMatchObject({ documentsChecked: 2, issues: [] });
     } finally {
       await client.close();
       await server.close();

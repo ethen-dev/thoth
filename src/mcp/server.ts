@@ -5,6 +5,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod/v4";
 import {
+  appendLogEntry,
   captureWikiDocument,
   getWikiDocumentById,
   listWikiDocuments,
@@ -13,6 +14,7 @@ import {
   rebuildWikiIndex,
   searchWikiDocuments,
   updateWikiDocument,
+  validLogKinds,
   validWikiCaptureDocumentTypes,
   validWikiDocumentTypes,
   validWikiRelationTypes,
@@ -291,6 +293,34 @@ export function createThothMcpServer(): McpServer {
     async () => {
       const config = await loadConfig();
       const result = await lintWikiDocuments(config);
+
+      return jsonResult(result);
+    },
+  );
+
+  server.registerTool(
+    "wiki_log",
+    {
+      title: "Append Log Entry",
+      description: "Append an entry to the global log and optionally a project timeline.",
+      inputSchema: {
+        content: z.string().min(1),
+        kind: z.enum(validLogKinds).optional(),
+        project: z.string().optional(),
+        ref: z.string().optional(),
+      },
+      annotations: {
+        readOnlyHint: false,
+      },
+    },
+    async (input) => {
+      const config = await loadConfig();
+      const result = await appendLogEntry(config, {
+        content: input.content,
+        kind: input.kind,
+        projectId: input.project,
+        ref: input.ref,
+      });
 
       return jsonResult(result);
     },

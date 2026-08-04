@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/core/index.js";
 import {
   addWikiSourceDocument,
+  appendLogEntry,
   appendWikiDocument,
   captureWikiDocument,
   getWikiDocumentById,
@@ -20,6 +21,7 @@ import {
   searchWikiDocuments,
   syncWikiRelationLinks,
   updateWikiDocument,
+  validLogKinds,
   validWikiRelationTypes,
 } from "../src/wiki/index.js";
 
@@ -74,7 +76,11 @@ describe("wiki workspace", () => {
 
     const firstInit = await initializeWiki(config);
     expect(firstInit.index).toBe("created");
+    expect(firstInit.log).toBe("created");
     expect(firstInit.missingDirectories).toEqual([]);
+
+    const logPath = path.join(config.resolvedWikiPath, "log.md");
+    expect(await readFile(logPath, "utf8")).toContain("# T.H.O.T.H. Global Log");
 
     const indexPath = path.join(config.resolvedWikiPath, "index.md");
     await writeFile(indexPath, "existing index", "utf8");
@@ -325,6 +331,120 @@ Visible content.
     expect(document?.content).toContain("Original body.");
     expect(document?.content).toContain("## Notes\n\nAppended note.");
     expect(document?.metadata.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("initializes a global log.md with generated frontmatter", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+
+    const result = await initializeWiki(config);
+    const log = await readFile(path.join(config.resolvedWikiPath, "log.md"), "utf8");
+
+    expect(result.log).toBe("created");
+    expect(log).toContain("id: wiki-log");
+    expect(log).toContain("title: T.H.O.T.H. Global Log");
+    expect(log).toContain("type: reference");
+    expect(log).toContain("status: active");
+    expect(log).toContain("source: generated");
+    expect(log).toContain("# T.H.O.T.H. Global Log");
+  });
+
+  it("appends a global-only log entry with a parseable prefix", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    const result = await appendLogEntry(config, {
+      content: "First durable note.",
+    });
+    const log = await readFile(path.join(config.resolvedWikiPath, "log.md"), "utf8");
+
+    expect(result.globalPath).toBe("log.md");
+    expect(result.timelinePath).toBeUndefined();
+    expect(log).toMatch(/## \[\d{4}-\d{2}-\d{2}\] log \| First durable note\./);
+    expect(log).toContain("- First durable note.");
+  });
+
+  it("appends a log entry to a project timeline and the global log", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    const project = await captureWikiDocument(config, {
+      content: "Project body.",
+      title: "Timeline Project",
+      type: "project",
+    });
+
+    const result = await appendLogEntry(config, {
+      content: "Project milestone reached.",
+      projectId: project.id,
+    });
+    const timeline = await readFile(
+      path.join(config.resolvedWikiPath, "timelines", `timeline-${project.id}.md`),
+      "utf8",
+    );
+    const log = await readFile(path.join(config.resolvedWikiPath, "log.md"), "utf8");
+
+    expect(result.timelinePath).toBe(`timelines/timeline-${project.id}.md`);
+    expect(timeline).toContain(`timeline-${project.id}`);
+    expect(timeline).toContain(`Timeline ${project.id}`);
+    expect(timeline).toContain("type: timeline");
+    expect(timeline).toContain(project.id);
+    expect(timeline).toContain("belongs_to");
+    expect(timeline).toContain("Project milestone reached.");
+    expect(log).toContain("Project milestone reached.");
+  });
+
+  it("appends log entries in order", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    await appendLogEntry(config, { content: "First entry." });
+    await appendLogEntry(config, { content: "Second entry." });
+    const log = await readFile(path.join(config.resolvedWikiPath, "log.md"), "utf8");
+
+    expect(log.indexOf("First entry.")).toBeGreaterThanOrEqual(0);
+    expect(log.indexOf("Second entry.")).toBeGreaterThan(log.indexOf("First entry."));
+  });
+
+  it("adds a reference bullet when ref is provided", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    await appendLogEntry(config, {
+      content: "Entry with reference.",
+      ref: "note-example",
+    });
+    const log = await readFile(path.join(config.resolvedWikiPath, "log.md"), "utf8");
+
+    expect(log).toContain("- Reference: [[note-example]]");
+  });
+
+  it("rejects a log entry for a missing project", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    await expect(appendLogEntry(config, {
+      content: "Orphan entry.",
+      projectId: "project-missing",
+    })).rejects.toThrow("Project document not found: project-missing (expected type project)");
+  });
+
+  it("rejects an invalid log kind", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    await expect(appendLogEntry(config, {
+      content: "Bad kind.",
+      kind: "unknown-kind",
+    })).rejects.toThrow("Invalid log kind: unknown-kind");
+    expect(validLogKinds).toContain("log");
+    expect(validLogKinds).toContain("decision");
   });
 
   it("relates existing documents without duplicating relations", async () => {

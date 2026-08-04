@@ -1,5 +1,6 @@
 export {
   addWikiSourceDocument,
+  appendLogEntry,
   appendWikiDocument,
   captureWikiDocument,
   getWikiDocumentById,
@@ -15,6 +16,7 @@ export {
   searchWikiDocuments,
   syncWikiRelationLinks,
   updateWikiDocument,
+  validLogKinds,
   validWikiCaptureDocumentTypes,
   validWikiDocumentTypes,
   validWikiRelationTypes,
@@ -34,6 +36,8 @@ export type {
   WikiLintIssue,
   WikiLintResult,
   WikiListFilters,
+  WikiLogInput,
+  WikiLogResult,
   WikiRelateInput,
   WikiRelateResult,
   WikiSearchFilters,

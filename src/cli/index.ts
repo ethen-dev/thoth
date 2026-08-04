@@ -10,6 +10,7 @@ import {
 } from "../agents/index.js";
 import {
   addWikiSourceDocument,
+  appendLogEntry,
   appendWikiDocument,
   captureWikiDocument,
   getWikiDocumentById,
@@ -25,6 +26,7 @@ import {
   searchWikiDocuments,
   syncWikiRelationLinks,
   updateWikiDocument,
+  validLogKinds,
   validWikiCaptureDocumentTypes,
   validWikiDocumentTypes,
   validWikiRelationTypes,
@@ -206,6 +208,42 @@ program
         console.log(`Document: ${result.id}`);
         console.log(`Path: ${result.path}`);
         console.log(`Section: ${result.section}`);
+      } catch (error) {
+        reportError(error);
+      }
+    },
+  );
+
+program
+  .command("log")
+  .description("Append an entry to the global log and optionally a project timeline")
+  .argument("<content>", "Log entry content")
+  .option("--kind <kind>", `Log kind (${validLogKinds.join(", ")})`)
+  .option("--project <id>", "Project id to also append to its timeline")
+  .option("--ref <id>", "Referenced document id")
+  .action(
+    async (
+      content: string,
+      options: { kind?: string; project?: string; ref?: string },
+    ) => {
+      try {
+        const config = await loadConfig();
+        const result = await appendLogEntry(config, {
+          content,
+          kind: options.kind,
+          projectId: options.project,
+          ref: options.ref,
+        });
+
+        console.log(`Global log: ${result.globalPath}`);
+
+        if (result.timelinePath) {
+          console.log(`Timeline: ${result.timelinePath}`);
+        }
+
+        if (options.project) {
+          console.log(`Project: ${options.project}`);
+        }
       } catch (error) {
         reportError(error);
       }

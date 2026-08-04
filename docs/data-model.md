@@ -238,7 +238,9 @@ La wiki debe separar decisiones de implementaciones.
 
 No se deben guardar implementaciones como decisiones salvo que la implementacion sea en si misma una decision arquitectonica.
 
-Los logs deben vivir en `logs/` como archivos separados por sesion. Evitar un unico `log.md` global salvo que exista una necesidad concreta de indice agregado.
+Los logs deben vivir en `logs/` como archivos separados por sesion. Ademas, existe un `log.md` global en la raiz de la wiki, append-only, que registra entradas cronologicas de trabajo. Cada entrada usa un prefijo parseable `## [YYYY-MM-DD] <kind> | <resumen>` seguido de bullets con el contenido y, opcionalmente, un bullet `- Reference: [[<id>]]`.
+
+Para proyectos concretos, `thoth log --project <id>` tambien escribe la misma entrada en `timelines/timeline-<project-id>.md`, un documento `type: timeline` con relacion `belongs_to` al proyecto. Asi se mantiene un registro global agregado y, en paralelo, timelines por proyecto sin duplicar la fuente de verdad.
 
 La organizacion por carpetas debe ayudar a navegar manualmente, pero el sistema no debe depender solo de la ruta. Los metadatos deben ser la fuente principal para clasificar documentos.
 
