@@ -87,6 +87,7 @@ wiki/
   ideas/
   decisions/
   research/
+  sources/
   entities/
   timelines/
 thoth.config.json
@@ -113,6 +114,7 @@ Responsabilidades:
 - crear una pagina Markdown con frontmatter YAML
 - actualizar el indice cuando sea necesario
 - evitar sobrescribir documentos existentes
+- rechazar `--type source`; las fuentes raw se crean con `thoth source add`
 
 Opciones iniciales:
 
@@ -149,6 +151,26 @@ Opciones iniciales:
 - `--status`
 - `--tag`
 - `--recent`
+
+### thoth source
+
+Administra fuentes raw conservadas como documentos `type: source` en `sources/`.
+
+Ejemplos:
+
+```bash
+thoth source add "Transcripcion o material sin procesar" --title "Interview Alpha" --tag raw
+thoth source list
+thoth source show source-interview-alpha
+thoth source link source-interview-alpha note-derived-context
+```
+
+Subcomandos iniciales:
+
+- `source add <content> --title <title>`: crea una fuente raw; acepta `--status`, `--tag` repetible y `--id source-<slug>`.
+- `source list`: lista documentos de tipo `source`.
+- `source show <id>`: muestra una fuente usando la lectura normal de documentos.
+- `source link <source-id> <document-id>`: valida que el primer documento sea `type: source` y crea relaciones idempotentes `source_for` y `derived_from`, incluyendo enlaces Markdown.
 
 ### thoth show
 
@@ -243,6 +265,7 @@ Responsabilidades:
 
 - localizar documentos por `id`
 - actualizar `title`, `type` o `status`
+- rechazar conversiones hacia o desde `type: source`; las fuentes raw se crean con `thoth source add`
 - agregar tags sin duplicarlos
 - actualizar `updated_at`
 - conservar el cuerpo Markdown del documento
@@ -279,6 +302,7 @@ Responsabilidades:
 
 - validar que el documento fuente exista
 - validar que el documento destino exista
+- validar que la relacion exista en el catalogo semantico (`has_implementation`, `derived_from`, etc.)
 - agregar una entrada a `related`
 - evitar relaciones duplicadas
 - actualizar `updated_at` del documento fuente

@@ -17,6 +17,7 @@ const wikiDirectories = [
   "sessions",
   "logs",
   "research",
+  "sources",
   "entities",
   "timelines",
 ] as const;
@@ -29,10 +30,65 @@ const humanIndexSections = [
   { heading: "Notes", type: "note" },
   { heading: "Ideas", type: "idea" },
   { heading: "Research", type: "research" },
+  { heading: "Sources", type: "source" },
   { heading: "Entities", type: "entity" },
   { heading: "Sessions", type: "session" },
   { heading: "Timelines", type: "timeline" },
 ] as const;
+
+export const validWikiDocumentTypes = [
+  "project",
+  "note",
+  "idea",
+  "decision",
+  "implementation",
+  "session",
+  "log",
+  "research",
+  "source",
+  "entity",
+  "character",
+  "chapter",
+  "timeline",
+  "reference",
+] as const;
+
+export const validWikiCaptureDocumentTypes = [
+  "project",
+  "note",
+  "idea",
+  "decision",
+  "implementation",
+  "session",
+  "log",
+  "research",
+  "entity",
+  "character",
+  "chapter",
+  "timeline",
+  "reference",
+] as const;
+
+export const validWikiRelationTypes = [
+  "belongs_to",
+  "mentions",
+  "depends_on",
+  "continues",
+  "contradicts",
+  "supports",
+  "references",
+  "related_to",
+  "has_note",
+  "has_decision",
+  "has_implementation",
+  "derived_from",
+  "source_for",
+  "supersedes",
+] as const;
+
+const validWikiDocumentTypeSet = new Set<string>(validWikiDocumentTypes);
+const validWikiCaptureDocumentTypeSet = new Set<string>(validWikiCaptureDocumentTypes);
+const validWikiRelationTypeSet = new Set<string>(validWikiRelationTypes);
 
 export type WikiStatus = {
   workspacePath: string;
@@ -71,6 +127,7 @@ export type WikiListFilters = {
 
 export type WikiCaptureInput = {
   content: string;
+  id?: string;
   title?: string;
   type?: string;
   status?: string;
@@ -84,6 +141,21 @@ export type WikiCaptureResult = {
   status: string;
   path: string;
   created: boolean;
+};
+
+export type WikiSourceAddInput = {
+  content: string;
+  title: string;
+  id?: string;
+  status?: string;
+  tags?: string[];
+};
+
+export type WikiSourceLinkResult = {
+  source: string;
+  target: string;
+  sourceRelation: WikiRelateResult;
+  targetRelation: WikiRelateResult;
 };
 
 export type WikiUpdateInput = {
@@ -271,7 +343,15 @@ export async function captureWikiDocument(
   const type = input.type ?? config.defaultType;
   const status = input.status ?? config.defaultStatus;
   const title = input.title ?? createTitle(input.content);
-  const id = `${type}-${slugify(title)}`;
+  const id = input.id ?? `${type}-${slugify(title)}`;
+
+  assertValidDocumentType(type);
+  assertValidCaptureDocumentType(type);
+
+  if (input.id) {
+    validateDocumentId(type, id);
+  }
+
   const directory = directoryForType(type);
   const relativePath = path.join(directory, `${id}.md`);
   const filePath = path.join(config.resolvedWikiPath, relativePath);
@@ -279,6 +359,45 @@ export async function captureWikiDocument(
     id,
     title,
     type,
+    status,
+    tags: input.tags ?? [],
+    content: input.content,
+    date: currentDate(),
+  });
+  const result = await writeFileIfMissing(filePath, markdown);
+
+  return {
+    id,
+    title,
+    type,
+    status,
+    path: relativePath,
+    created: result === "created",
+  };
+}
+
+export async function addWikiSourceDocument(
+  config: ResolvedThothConfig,
+  input: WikiSourceAddInput,
+): Promise<WikiCaptureResult> {
+  const title = input.title.trim();
+
+  if (!title) {
+    throw new Error("Source title is required");
+  }
+
+  const type = "source";
+  const status = input.status ?? config.defaultStatus;
+  const id = input.id ?? `${type}-${slugify(title)}`;
+
+  validateDocumentId(type, id);
+
+  const directory = directoryForType(type);
+  const relativePath = path.join(directory, `${id}.md`);
+  const filePath = path.join(config.resolvedWikiPath, relativePath);
+  const markdown = createWikiSourceMarkdown({
+    id,
+    title,
     status,
     tags: input.tags ?? [],
     content: input.content,
@@ -314,6 +433,8 @@ export async function updateWikiDocument(
   }
 
   if (input.type) {
+    assertValidDocumentType(input.type);
+    assertValidSourceTypeTransition(located.document.type, input.type);
     metadata.type = input.type;
   }
 
@@ -327,6 +448,8 @@ export async function updateWikiDocument(
 
   normalizeDateMetadata(metadata);
   metadata.updated_at = currentDate();
+
+  await assertValidUpdatedDocumentRelations(config.resolvedWikiPath, input.id, metadata);
 
   await writeFile(located.path, matter.stringify(parsed.content, metadata), "utf8");
 
@@ -387,6 +510,8 @@ export async function relateWikiDocuments(
 
   const parsed = matter(source.document.raw);
   const metadata = { ...(parsed.data as Record<string, unknown>) };
+  assertValidRelationType(input.relation);
+  assertValidSourceRelation(input.relation, source.document, target.document);
   const relations = readRelations(metadata.related);
   const exists = relations.some(
     (relation) => relation.id === input.targetId && relation.relation === input.relation,
@@ -411,6 +536,46 @@ export async function relateWikiDocuments(
     relation: input.relation,
     path: source.document.path,
     created: !exists,
+  };
+}
+
+export async function linkWikiSourceDocument(
+  config: ResolvedThothConfig,
+  sourceId: string,
+  targetId: string,
+): Promise<WikiSourceLinkResult> {
+  const source = await findWikiDocumentById(config.resolvedWikiPath, sourceId);
+
+  if (!source) {
+    throw new Error(`Source document not found: ${sourceId}`);
+  }
+
+  if (source.document.type !== "source") {
+    throw new Error(`Source document must have type source: ${sourceId}`);
+  }
+
+  const target = await findWikiDocumentById(config.resolvedWikiPath, targetId);
+
+  if (!target) {
+    throw new Error(`Target document not found: ${targetId}`);
+  }
+
+  const sourceRelation = await relateWikiDocuments(config, {
+    sourceId,
+    targetId,
+    relation: "source_for",
+  });
+  const targetRelation = await relateWikiDocuments(config, {
+    sourceId: targetId,
+    targetId: sourceId,
+    relation: "derived_from",
+  });
+
+  return {
+    source: sourceId,
+    target: targetId,
+    sourceRelation,
+    targetRelation,
   };
 }
 
@@ -657,6 +822,13 @@ export async function lintWikiDocuments(
       }
     }
 
+    if (hasStringMetadata(document.metadata, "type") && !validWikiDocumentTypeSet.has(document.type)) {
+      issues.push({
+        path: document.path,
+        message: `Invalid document type: ${document.type}`,
+      });
+    }
+
     const paths = ids.get(document.id) ?? [];
     paths.push(document.path);
     ids.set(document.id, paths);
@@ -679,11 +851,25 @@ export async function lintWikiDocuments(
 
   for (const document of documents) {
     for (const relation of readRelations(document.metadata.related)) {
+      if (!validWikiRelationTypeSet.has(relation.relation)) {
+        issues.push({
+          path: document.path,
+          message: `Invalid relation type: ${relation.relation}`,
+        });
+      }
+
       if (!knownIds.has(relation.id)) {
         issues.push({
           path: document.path,
           message: `Broken relation: ${document.id} -> ${relation.id} (${relation.relation})`,
         });
+        continue;
+      }
+
+      const target = documents.find((candidate) => candidate.id === relation.id);
+
+      if (target) {
+        issues.push(...validateSourceRelationIssues(document, relation, target));
       }
     }
   }
@@ -1095,6 +1281,38 @@ ${input.content}
 `;
 }
 
+function createWikiSourceMarkdown(input: {
+  id: string;
+  title: string;
+  status: string;
+  tags: string[];
+  content: string;
+  date: string;
+}): string {
+  const tags = input.tags.length > 0
+    ? `\n${input.tags.map((tag) => `  - ${yamlString(tag)}`).join("\n")}`
+    : " []";
+
+  return `---
+id: ${yamlString(input.id)}
+title: ${yamlString(input.title)}
+type: "source"
+status: ${yamlString(input.status)}
+created_at: ${input.date}
+updated_at: ${input.date}
+tags:${tags}
+source: "raw"
+related: []
+---
+
+# ${input.title}
+
+## Raw Source
+
+${input.content}
+`;
+}
+
 function currentDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -1124,6 +1342,7 @@ function directoryForType(type: string): string {
     project: "projects",
     research: "research",
     session: "sessions",
+    source: "sources",
     timeline: "timelines",
   };
 
@@ -1139,6 +1358,92 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 
   return slug || "untitled";
+}
+
+function validateDocumentId(type: string, id: string): void {
+  const expectedPrefix = `${type}-`;
+
+  if (!id.startsWith(expectedPrefix) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+    throw new Error(`Document id must match ${expectedPrefix}<slug>: ${id}`);
+  }
+}
+
+function assertValidDocumentType(type: string): void {
+  if (!validWikiDocumentTypeSet.has(type)) {
+    throw new Error(`Invalid document type: ${type}`);
+  }
+}
+
+function assertValidCaptureDocumentType(type: string): void {
+  if (!validWikiCaptureDocumentTypeSet.has(type)) {
+    throw new Error("Use source add to create source documents; capture cannot create type source");
+  }
+}
+
+function assertValidRelationType(relation: string): void {
+  if (!validWikiRelationTypeSet.has(relation)) {
+    throw new Error(`Invalid relation type: ${relation}`);
+  }
+}
+
+function assertValidSourceRelation(
+  relation: string,
+  source: WikiDocumentSummary,
+  target: WikiDocumentSummary,
+): void {
+  if (relation === "source_for" && source.type !== "source") {
+    throw new Error("Relation source_for must originate from a source document");
+  }
+
+}
+
+function assertValidSourceTypeTransition(currentType: string, nextType: string): void {
+  if (currentType === nextType) {
+    return;
+  }
+
+  if (nextType === "source") {
+    throw new Error("Use source add to create source documents; update cannot change a document to type source");
+  }
+
+  if (currentType === "source") {
+    throw new Error("Update cannot change a source document to another type");
+  }
+}
+
+async function assertValidUpdatedDocumentRelations(
+  wikiPath: string,
+  documentId: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  const updatedType = readString(metadata.type, "unknown");
+  const outgoingRelations = readRelations(metadata.related);
+
+  for (const relation of outgoingRelations) {
+    assertValidRelationType(relation.relation);
+
+    if (relation.relation === "source_for" && updatedType !== "source") {
+      throw new Error("Relation source_for must originate from a source document");
+    }
+
+  }
+}
+
+function validateSourceRelationIssues(
+  source: WikiDocument,
+  relation: { id: string; relation: string },
+  target: WikiDocument,
+): WikiLintIssue[] {
+  const issues: WikiLintIssue[] = [];
+
+  if (relation.relation === "source_for" && source.type !== "source") {
+    issues.push({
+      path: source.path,
+      message: "Invalid source relation: source_for must originate from a source document",
+    });
+  }
+
+  return issues;
 }
 
 function createSnippet(text: string, normalizedQuery: string): string {

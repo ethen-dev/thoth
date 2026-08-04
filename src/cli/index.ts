@@ -9,12 +9,14 @@ import {
   validateAgents,
 } from "../agents/index.js";
 import {
+  addWikiSourceDocument,
   appendWikiDocument,
   captureWikiDocument,
   getWikiDocumentById,
   getWikiStatus,
   initializeWiki,
   listWikiDocuments,
+  linkWikiSourceDocument,
   lintWikiDocuments,
   relateWikiDocuments,
   rebuildHumanWikiIndex,
@@ -23,11 +25,17 @@ import {
   searchWikiDocuments,
   syncWikiRelationLinks,
   updateWikiDocument,
+  validWikiCaptureDocumentTypes,
+  validWikiDocumentTypes,
+  validWikiRelationTypes,
 } from "../actions/index.js";
 import { loadConfig } from "../core/index.js";
 
 const thothVersion = "0.6.0";
 const program = new Command();
+const documentTypeHelp = `Document type (${validWikiDocumentTypes.join(", ")})`;
+const captureDocumentTypeHelp = `Document type (${validWikiCaptureDocumentTypes.join(", ")}); use source add for source documents`;
+const relationTypeHelp = `Relation type (${validWikiRelationTypes.join(", ")})`;
 
 program
   .name("thoth")
@@ -79,7 +87,7 @@ program
 program
   .command("list")
   .description("List wiki documents")
-  .option("--type <type>", "Filter by document type")
+  .option("--type <type>", documentTypeHelp)
   .option("--status <status>", "Filter by document status")
   .option("--tag <tag>", "Filter by tag")
   .action(async (options: { type?: string; status?: string; tag?: string }) => {
@@ -142,7 +150,7 @@ program
   .command("capture")
   .description("Capture content into the configured LLM Wiki")
   .argument("<content>", "Content to capture")
-  .option("--type <type>", "Document type")
+  .option("--type <type>", captureDocumentTypeHelp)
   .option("--title <title>", "Document title")
   .option("--status <status>", "Document status")
   .option("--tag <tag>", "Document tag. Can be used multiple times", collectValues, [])
@@ -208,7 +216,7 @@ program
   .command("search")
   .description("Search wiki documents")
   .argument("<query>", "Search query")
-  .option("--type <type>", "Filter by document type")
+  .option("--type <type>", documentTypeHelp)
   .option("--status <status>", "Filter by document status")
   .option("--tag <tag>", "Filter by tag")
   .action(
@@ -319,7 +327,7 @@ program
   .description("Update wiki document metadata")
   .argument("<id>", "Document id")
   .option("--title <title>", "Document title")
-  .option("--type <type>", "Document type")
+  .option("--type <type>", `${documentTypeHelp}; cannot convert documents to or from source`)
   .option("--status <status>", "Document status")
   .option("--tag <tag>", "Tag to append. Can be used multiple times", collectValues, [])
   .action(
@@ -359,7 +367,7 @@ program
   .description("Create a relation between wiki documents")
   .argument("<source>", "Source document id")
   .argument("<target>", "Target document id")
-  .requiredOption("--relation <relation>", "Relation type")
+  .requiredOption("--relation <relation>", relationTypeHelp)
   .action(
     async (
       source: string,
@@ -384,6 +392,126 @@ program
       }
     },
   );
+
+const source = program
+  .command("source")
+  .description("Manage raw source documents");
+
+source
+  .command("add")
+  .description("Add raw content as a source document")
+  .argument("<content>", "Raw source content")
+  .requiredOption("--title <title>", "Source title")
+  .option("--id <id>", "Source id (must match source-<slug>)")
+  .option("--status <status>", "Source status")
+  .option("--tag <tag>", "Source tag. Can be used multiple times", collectValues, [])
+  .action(
+    async (
+      content: string,
+      options: { title: string; id?: string; status?: string; tag?: string[] },
+    ) => {
+      try {
+        const config = await loadConfig();
+        const result = await addWikiSourceDocument(config, {
+          content,
+          title: options.title,
+          id: options.id,
+          status: options.status,
+          tags: options.tag,
+        });
+
+        console.log(`Source: ${result.id}`);
+        console.log(`Path: ${result.path}`);
+        console.log(`Status: ${result.created ? "created" : "exists"}`);
+      } catch (error) {
+        reportError(error);
+      }
+    },
+  );
+
+source
+  .command("list")
+  .description("List source documents")
+  .option("--status <status>", "Filter by source status")
+  .option("--tag <tag>", "Filter by tag")
+  .action(async (options: { status?: string; tag?: string }) => {
+    try {
+      const config = await loadConfig();
+      const documents = await listWikiDocuments(config, { ...options, type: "source" });
+
+      if (documents.length === 0) {
+        console.log("No source documents found.");
+        return;
+      }
+
+      for (const document of documents) {
+        console.log(
+          `${document.id}\t${document.type}\t${document.status}\t${document.title}\t${document.path}`,
+        );
+      }
+    } catch (error) {
+      reportError(error);
+    }
+  });
+
+source
+  .command("show")
+  .description("Show a source document by id")
+  .argument("<id>", "Source document id")
+  .option("--raw", "Print raw Markdown including frontmatter")
+  .option("--metadata", "Print document metadata as JSON")
+  .action(
+    async (
+      id: string,
+      options: { raw?: boolean; metadata?: boolean },
+    ) => {
+      try {
+        const config = await loadConfig();
+        const document = await getWikiDocumentById(config, id);
+
+        if (!document) {
+          throw new Error(`Source document not found: ${id}`);
+        }
+
+        if (document.type !== "source") {
+          throw new Error(`Document is not a source: ${id}`);
+        }
+
+        if (options.raw) {
+          console.log(document.raw);
+          return;
+        }
+
+        if (options.metadata) {
+          console.log(JSON.stringify(document.metadata, null, 2));
+          return;
+        }
+
+        console.log(document.content.trimEnd());
+      } catch (error) {
+        reportError(error);
+      }
+    },
+  );
+
+source
+  .command("link")
+  .description("Link a source to a derived document")
+  .argument("<source-id>", "Source document id")
+  .argument("<document-id>", "Derived document id")
+  .action(async (sourceId: string, documentId: string) => {
+    try {
+      const config = await loadConfig();
+      const result = await linkWikiSourceDocument(config, sourceId, documentId);
+
+      console.log(`Source: ${result.source}`);
+      console.log(`Document: ${result.target}`);
+      console.log(`Source relation: ${result.sourceRelation.created ? "created" : "exists"}`);
+      console.log(`Document relation: ${result.targetRelation.created ? "created" : "exists"}`);
+    } catch (error) {
+      reportError(error);
+    }
+  });
 
 program
   .command("doctor")

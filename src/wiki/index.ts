@@ -9,6 +9,7 @@ export type WikiDocumentType =
   | "session"
   | "log"
   | "research"
+  | "source"
   | "entity"
   | "character"
   | "chapter"

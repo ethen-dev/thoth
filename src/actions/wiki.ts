@@ -1,10 +1,12 @@
 export {
+  addWikiSourceDocument,
   appendWikiDocument,
   captureWikiDocument,
   getWikiDocumentById,
   getWikiStatus,
   initializeWiki,
   listWikiDocuments,
+  linkWikiSourceDocument,
   lintWikiDocuments,
   relateWikiDocuments,
   rebuildHumanWikiIndex,
@@ -13,6 +15,9 @@ export {
   searchWikiDocuments,
   syncWikiRelationLinks,
   updateWikiDocument,
+  validWikiCaptureDocumentTypes,
+  validWikiDocumentTypes,
+  validWikiRelationTypes,
 } from "../wiki/index.js";
 
 export type {
@@ -33,6 +38,8 @@ export type {
   WikiRelateResult,
   WikiSearchFilters,
   WikiSearchResult,
+  WikiSourceAddInput,
+  WikiSourceLinkResult,
   WikiStatus,
   WikiSyncLinksResult,
   WikiUpdateInput,

@@ -10,7 +10,7 @@ The current MVP is local-first. Markdown is the source of truth. `.thoth/index.j
 
 Usable local MVP components:
 
-- CLI: `init`, `status`, `list`, `show`, `capture`, `append`, `search`, `index`, `lint`, `update`, `relate`, `doctor`.
+- CLI: `init`, `status`, `list`, `show`, `capture`, `append`, `search`, `index`, `lint`, `update`, `relate`, `source`, `doctor`.
 - MCP stdio server: tools, resources, and the `capture_memory` prompt.
 - JSON Schemas for wiki documents and derived indexes.
 - External wiki support via `thoth.config.json`.
@@ -87,6 +87,13 @@ Search and relate knowledge:
 ```bash
 npm run dev -- search "durable context"
 npm run dev -- relate note-durable-context project-thoth --relation belongs_to
+```
+
+Capture a raw source and link it to a derived document:
+
+```bash
+npm run dev -- source add "raw transcript or pasted material" --title "Interview Alpha" --tag raw
+npm run dev -- source link source-interview-alpha note-durable-context
 ```
 
 Rebuild indexes and diagnose the workspace:

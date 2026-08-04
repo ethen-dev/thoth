@@ -78,11 +78,14 @@ Tipos iniciales:
 - `session`
 - `log`
 - `research`
+- `source`
 - `entity`
 - `character`
 - `chapter`
 - `timeline`
 - `reference`
+
+El lint y las operaciones de escritura rechazan tipos fuera de este catalogo para mantener portabilidad.
 
 ### status
 
@@ -118,6 +121,9 @@ Valores iniciales:
 - `file`
 - `import`
 - `generated`
+- `raw`
+
+Los documentos con `type: source` representan fuentes raw y normalmente usan `source: raw`.
 
 ### related
 
@@ -139,7 +145,19 @@ Relaciones iniciales:
 - `continues`: continua un documento previo
 - `contradicts`: contradice o entra en conflicto con otro documento
 - `supports`: apoya o refuerza otra informacion
+- `related_to`: relacion generica cuando no aplica un tipo mas especifico
 - `derived_from`: deriva de una fuente o documento previo
+- `source_for`: indica que un documento `source` sirve como fuente raw para otro documento
+- `supersedes`: reemplaza o deja obsoleto un documento previo
+
+Tambien se preservan relaciones ya usadas por wikis iniciales o documentacion: `references`, `has_note`, `has_decision` y `has_implementation`.
+
+Restricciones semanticas minimas:
+
+- `source_for` debe originarse en un documento con `type: source`.
+- `derived_from` puede apuntar a una fuente o a un documento previo no-source.
+- `capture` no crea documentos `source`; `update --type` no convierte documentos a `source` ni cambia documentos `source` a otro tipo; usa `source add` para crear fuentes raw.
+- El lint reporta tipos y relaciones fuera de catalogo, y las operaciones `capture`, `update` y `relate` los rechazan.
 
 ## Estructura de Contenido
 
@@ -188,6 +206,7 @@ wiki/
   sessions/
   logs/
   research/
+  sources/
   entities/
   timelines/
 ```
@@ -206,6 +225,8 @@ No se deben guardar implementaciones como decisiones salvo que la implementacion
 Los logs deben vivir en `logs/` como archivos separados por sesion. Evitar un unico `log.md` global salvo que exista una necesidad concreta de indice agregado.
 
 La organizacion por carpetas debe ayudar a navegar manualmente, pero el sistema no debe depender solo de la ruta. Los metadatos deben ser la fuente principal para clasificar documentos.
+
+Los documentos `source` viven en `sources/` y preservan contenido raw con una seccion `Raw Source`. Para enlazarlos a conocimiento procesado, `source link` crea la relacion `source_for` desde la fuente al documento derivado y `derived_from` en sentido inverso.
 
 Los proyectos complejos pueden usar subdirectorios dentro de `projects/` para agrupar subareas relacionadas. Por ejemplo, `projects/thoth/project-thoth.md` puede actuar como raiz y `projects/thoth/mcp.md`, `projects/thoth/cli.md` o `projects/thoth/agents.md` como subdocumentos relacionados mediante `related`.
 

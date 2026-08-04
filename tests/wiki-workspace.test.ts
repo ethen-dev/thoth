@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/core/index.js";
 import {
+  addWikiSourceDocument,
   appendWikiDocument,
   captureWikiDocument,
   getWikiDocumentById,
@@ -11,6 +12,7 @@ import {
   initializeWiki,
   listWikiDocuments,
   lintWikiDocuments,
+  linkWikiSourceDocument,
   relateWikiDocuments,
   rebuildHumanWikiIndex,
   rebuildWikiIndex,
@@ -93,6 +95,31 @@ describe("wiki workspace", () => {
     expect(status.missingDirectories).toContain("projects");
     expect(status.missingDirectories).toContain("implementation");
     expect(status.missingDirectories).toContain("logs");
+    expect(status.missingDirectories).toContain("sources");
+  });
+
+  it("adds raw source documents under sources", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    const result = await addWikiSourceDocument(config, {
+      id: "source-interview-alpha",
+      title: "Interview Alpha",
+      content: "Raw transcript line one.\nRaw transcript line two.",
+      status: "captured",
+      tags: ["interview"],
+    });
+    const document = await getWikiDocumentById(config, result.id);
+    const sources = await listWikiDocuments(config, { type: "source" });
+
+    expect(result.path).toBe("sources/source-interview-alpha.md");
+    expect(document?.type).toBe("source");
+    expect(document?.status).toBe("captured");
+    expect(document?.tags).toEqual(["interview"]);
+    expect(document?.content).toContain("## Raw Source\n\nRaw transcript line one.");
+    expect(document?.content).not.toContain("## Content");
+    expect(sources.map((source) => source.id)).toContain("source-interview-alpha");
   });
 
   it("lists markdown documents and applies metadata filters", async () => {
@@ -173,6 +200,7 @@ status: active
     expect(index).toContain("## Decisions");
     expect(index).toContain("- [Example Decision](decisions/decision-example-decision.md)");
     expect(index).toContain("## Implementation");
+    expect(index).toContain("## Sources");
     expect(index).toContain("## Relation Map");
     expect(index).toContain("[Example Project](projects/project-example-project.md) --has_decision--> [Example Decision](decisions/decision-example-decision.md)");
     expect(index).toContain("thoth index --human");
@@ -338,6 +366,234 @@ Visible content.
     expect(document?.content).toContain(
       "- references: [Target Note](note-target-note.md)",
     );
+  });
+
+  it("accepts documented relation catalog entries", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    const project = await captureWikiDocument(config, {
+      content: "Project body.",
+      title: "Catalog Project",
+      type: "project",
+    });
+    const implementation = await captureWikiDocument(config, {
+      content: "Implementation body.",
+      title: "Catalog Implementation",
+      type: "implementation",
+    });
+
+    const result = await relateWikiDocuments(config, {
+      sourceId: project.id,
+      targetId: implementation.id,
+      relation: "has_implementation",
+    });
+    const document = await getWikiDocumentById(config, project.id);
+
+    expect(result.created).toBe(true);
+    expect(document?.metadata.related).toEqual([
+      { id: implementation.id, relation: "has_implementation" },
+    ]);
+  });
+
+  it("allows derived_from to target a previous non-source document", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    const current = await captureWikiDocument(config, {
+      content: "Current derived knowledge.",
+      title: "Current Note",
+      type: "note",
+    });
+    const previous = await captureWikiDocument(config, {
+      content: "Previous synthesis.",
+      title: "Previous Note",
+      type: "note",
+    });
+
+    await relateWikiDocuments(config, {
+      sourceId: current.id,
+      targetId: previous.id,
+      relation: "derived_from",
+    });
+
+    const lint = await lintWikiDocuments(config);
+    const document = await getWikiDocumentById(config, current.id);
+
+    expect(document?.metadata.related).toEqual([
+      { id: previous.id, relation: "derived_from" },
+    ]);
+    expect(lint.issues).not.toContainEqual({
+      path: document?.path,
+      message: "Invalid source relation: derived_from must target a source document",
+    });
+  });
+
+  it("links sources bidirectionally without duplicating relations", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    const source = await addWikiSourceDocument(config, {
+      title: "Raw Memo",
+      content: "Unprocessed memo text.",
+    });
+    const target = await captureWikiDocument(config, {
+      title: "Derived Note",
+      content: "Structured note from memo.",
+      type: "note",
+    });
+
+    const firstResult = await linkWikiSourceDocument(config, source.id, target.id);
+    const secondResult = await linkWikiSourceDocument(config, source.id, target.id);
+    const sourceDocument = await getWikiDocumentById(config, source.id);
+    const targetDocument = await getWikiDocumentById(config, target.id);
+
+    expect(firstResult.sourceRelation.created).toBe(true);
+    expect(firstResult.targetRelation.created).toBe(true);
+    expect(secondResult.sourceRelation.created).toBe(false);
+    expect(secondResult.targetRelation.created).toBe(false);
+    expect(sourceDocument?.metadata.related).toEqual([
+      { id: target.id, relation: "source_for" },
+    ]);
+    expect(targetDocument?.metadata.related).toEqual([
+      { id: source.id, relation: "derived_from" },
+    ]);
+    expect(sourceDocument?.content).toContain(
+      "- source_for: [Derived Note](../notes/note-derived-note.md)",
+    );
+    expect(targetDocument?.content).toContain(
+      "- derived_from: [Raw Memo](../sources/source-raw-memo.md)",
+    );
+  });
+
+  it("rejects invalid document types and relation combinations on writes", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    await expect(captureWikiDocument(config, {
+      title: "Bad Type",
+      content: "Body.",
+      type: "unknown-kind",
+    })).rejects.toThrow("Invalid document type: unknown-kind");
+    await expect(captureWikiDocument(config, {
+      title: "Raw Via Capture",
+      content: "Raw body.",
+      type: "source",
+    })).rejects.toThrow("capture cannot create type source");
+
+    const source = await addWikiSourceDocument(config, {
+      title: "Raw Memo",
+      content: "Unprocessed memo text.",
+    });
+    const note = await captureWikiDocument(config, {
+      title: "Derived Note",
+      content: "Structured note from memo.",
+      type: "note",
+    });
+    const otherNote = await captureWikiDocument(config, {
+      title: "Other Note",
+      content: "Other body.",
+      type: "note",
+    });
+
+    await expect(relateWikiDocuments(config, {
+      sourceId: note.id,
+      targetId: otherNote.id,
+      relation: "unknown_relation",
+    })).rejects.toThrow("Invalid relation type: unknown_relation");
+    await expect(relateWikiDocuments(config, {
+      sourceId: note.id,
+      targetId: otherNote.id,
+      relation: "source_for",
+    })).rejects.toThrow("source_for must originate from a source document");
+    await expect(relateWikiDocuments(config, {
+      sourceId: source.id,
+      targetId: otherNote.id,
+      relation: "derived_from",
+    })).resolves.toMatchObject({ created: true });
+    await linkWikiSourceDocument(config, source.id, note.id);
+    await expect(updateWikiDocument(config, {
+      id: source.id,
+      type: "note",
+    })).rejects.toThrow("Update cannot change a source document to another type");
+    await expect(updateWikiDocument(config, {
+      id: note.id,
+      type: "source",
+    })).rejects.toThrow("update cannot change a document to type source");
+    await expect(updateWikiDocument(config, {
+      id: note.id,
+      type: "unknown-kind",
+    })).rejects.toThrow("Invalid document type: unknown-kind");
+  });
+
+  it("lints semantic document types, relation types, and source relation rules", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    await writeFile(
+      path.join(config.resolvedWikiPath, "notes", "bad-source-for.md"),
+      `---
+id: bad-source-for
+title: Bad Source For
+type: note
+status: active
+related:
+  - id: target-note
+    relation: source_for
+  - id: target-note
+    relation: unknown_relation
+---
+
+# Bad Source For
+`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(config.resolvedWikiPath, "notes", "invalid-type.md"),
+      `---
+id: invalid-type
+title: Invalid Type
+type: unknown-kind
+status: active
+---
+
+# Invalid Type
+`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(config.resolvedWikiPath, "notes", "target.md"),
+      `---
+id: target-note
+title: Target Note
+type: note
+status: active
+---
+
+# Target Note
+`,
+      "utf8",
+    );
+
+    const result = await lintWikiDocuments(config);
+
+    expect(result.issues).toContainEqual({
+      path: "notes/invalid-type.md",
+      message: "Invalid document type: unknown-kind",
+    });
+    expect(result.issues).toContainEqual({
+      path: "notes/bad-source-for.md",
+      message: "Invalid relation type: unknown_relation",
+    });
+    expect(result.issues).toContainEqual({
+      path: "notes/bad-source-for.md",
+      message: "Invalid source relation: source_for must originate from a source document",
+    });
   });
 
   it("syncs Markdown relation links from existing frontmatter relations", async () => {
