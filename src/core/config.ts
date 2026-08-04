@@ -9,6 +9,14 @@ export type ThothConfig = {
   dateFormat: string;
 };
 
+export const supportedDateFormats = [
+  "YYYY-MM-DD",
+  "DD/MM/YYYY",
+  "MM/DD/YYYY",
+  "YYYY/MM/DD",
+] as const;
+export type DateFormat = (typeof supportedDateFormats)[number];
+
 export type ResolvedThothConfig = ThothConfig & {
   workspacePath: string;
   configPath: string;
@@ -22,6 +30,12 @@ const defaultConfig: ThothConfig = {
   dateFormat: "YYYY-MM-DD",
 };
 
+export function resolveDateFormat(value: unknown): DateFormat {
+  return typeof value === "string" && (supportedDateFormats as readonly string[]).includes(value)
+    ? value as DateFormat
+    : defaultConfig.dateFormat as DateFormat;
+}
+
 export async function loadConfig(
   workspacePath?: string,
 ): Promise<ResolvedThothConfig> {
@@ -29,7 +43,7 @@ export async function loadConfig(
   const resolvedWorkspacePath = path.dirname(configPath);
   const rawConfig = await readFile(configPath, "utf8");
   const parsedConfig = JSON.parse(rawConfig) as Partial<ThothConfig>;
-  const config = { ...defaultConfig, ...parsedConfig };
+  const config: ThothConfig = { ...defaultConfig, ...parsedConfig, dateFormat: resolveDateFormat(parsedConfig.dateFormat) };
 
   if (!config.wikiPath || typeof config.wikiPath !== "string") {
     throw new Error("Invalid thoth.config.json: wikiPath must be a string.");

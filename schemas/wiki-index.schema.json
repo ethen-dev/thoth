@@ -41,9 +41,9 @@
               "task"
             ]
           },
-          "status": {
-            "type": "string",
-            "minLength": 1
+            "status": {
+              "type": "string",
+              "enum": ["draft", "active", "review", "accepted", "captured", "completed", "archived"]
           },
           "tags": {
             "type": "array",

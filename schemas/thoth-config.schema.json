@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thoth.local/schemas/thoth-config.schema.json",
+  "title": "T.H.O.T.H. Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "wikiPath": { "type": "string", "minLength": 1 },
+    "defaultType": { "type": "string", "minLength": 1 },
+    "defaultStatus": { "type": "string", "minLength": 1 },
+    "dateFormat": {
+      "type": "string",
+      "enum": ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD"]
+    }
+  }
+}

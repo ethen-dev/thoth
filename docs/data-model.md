@@ -94,12 +94,24 @@ Las tareas de desarrollo requieren `projectId` y se almacenan bajo `projects/<pr
 
 Estado actual del documento.
 
-Estados iniciales:
+Catalogo portable de estados (los valores historicos se mantienen compatibles):
 
 - `draft`
 - `active`
 - `review`
 - `archived`
+- `accepted`
+- `captured`
+- `completed`
+
+Las escrituras y el schema rechazan estados fuera de este catalogo. `captured` se
+usa para fuentes recien incorporadas y `accepted`/`completed` para conocimiento
+revisado o trabajo terminado.
+
+Las fechas generadas respetan `dateFormat` de `thoth.config.json`. Se soportan
+`YYYY-MM-DD`, `DD/MM/YYYY`, `MM/DD/YYYY` y `YYYY/MM/DD`; cualquier otro valor
+usa de forma segura `YYYY-MM-DD`. Los dos formatos con día/mes usan el patrón
+portable `DD/MM/YYYY` o `MM/DD/YYYY` (`dd/mm` numérico) en el schema.
 
 ### created_at
 
@@ -174,6 +186,14 @@ Relaciones iniciales:
 Restricciones semanticas minimas:
 
 - `source_for` debe originarse en un documento con `type: source`.
+- `source_for` apunta a un documento no-source. La forma canónica de
+  `derived_from` sale de conocimiento no-source y apunta a una fuente o a
+  conocimiento previo; por compatibilidad, también se conserva la forma
+  histórica source -> documento.
+- `belongs_to` enlaza tareas/timelines con proyectos y `has_subarea` enlaza
+  proyectos con subproyectos.
+- `has_implementation` apunta a `implementation`; `implements` sale de
+  `implementation`; `verifies` solo acepta documentos y objetivos verificables.
 - `derived_from` puede apuntar a una fuente o a un documento previo no-source.
 - `capture` no crea documentos `source`; `update --type` no convierte documentos a `source` ni cambia documentos `source` a otro tipo; usa `source add` para crear fuentes raw.
 - El lint reporta tipos y relaciones fuera de catalogo, y las operaciones `capture`, `update` y `relate` los rechazan.

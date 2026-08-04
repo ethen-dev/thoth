@@ -55,6 +55,28 @@ describe("wiki workspace", () => {
     );
   });
 
+  it("uses supported date formats and safely falls back for invalid formats", async () => {
+    const formats = ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD"] as const;
+    for (const dateFormat of formats) {
+      const workspacePath = await createWorkspace({ wikiPath: "../wiki", dateFormat });
+      const config = await loadConfig(workspacePath);
+      await initializeWiki(config);
+      const note = await captureWikiDocument(config, { title: `Formatted ${dateFormat}`, content: "Body.", type: "note" });
+      const raw = await readFile(path.join(config.resolvedWikiPath, note.path), "utf8");
+      const datePattern = dateFormat === "YYYY-MM-DD"
+        ? /created_at: \d{4}-\d{2}-\d{2}/
+        : dateFormat === "YYYY/MM/DD"
+          ? /created_at: \d{4}\/\d{2}\/\d{2}/
+          : /created_at: \d{2}\/\d{2}\/\d{4}/;
+      expect(raw).toMatch(datePattern);
+      expect((await lintWikiDocuments(config)).issues).toEqual([]);
+    }
+
+    const fallbackWorkspace = await createWorkspace({ wikiPath: "../wiki", dateFormat: "not-supported" });
+    const fallback = await loadConfig(fallbackWorkspace);
+    expect(fallback.dateFormat).toBe("YYYY-MM-DD");
+  });
+
   it("loads config from THOTH_CONFIG outside the workspace", async () => {
     const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
     const otherPath = await mkdtemp(path.join(os.tmpdir(), "thoth-other-"));
@@ -777,6 +799,26 @@ Visible content.
     ]);
   });
 
+  it("preserves belongs_to for project notes, decisions, and subareas", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    const project = await captureWikiDocument(config, { title: "Parent Project", content: "Project.", type: "project" });
+    const note = await captureWikiDocument(config, { title: "Project Note", content: "Note.", type: "note" });
+    const decision = await captureWikiDocument(config, { title: "Project Decision", content: "Decision.", type: "decision" });
+    const subarea = await captureWikiDocument(config, { title: "Project Subarea", content: "Subarea.", type: "project" });
+
+    for (const sourceId of [note.id, decision.id, subarea.id]) {
+      await expect(relateWikiDocuments(config, {
+        sourceId,
+        targetId: project.id,
+        relation: "belongs_to",
+      })).resolves.toMatchObject({ created: true });
+    }
+
+    expect((await lintWikiDocuments(config)).issues).toEqual([]);
+  });
+
   it("allows derived_from to target a previous non-source document", async () => {
     const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
     const config = await loadConfig(workspacePath);
@@ -864,6 +906,12 @@ Visible content.
       content: "Raw body.",
       type: "source",
     })).rejects.toThrow("capture cannot create type source");
+    await expect(captureWikiDocument(config, {
+      title: "Bad Status",
+      content: "Body.",
+      type: "note",
+      status: "unknown-status",
+    })).rejects.toThrow("Invalid document status: unknown-status");
 
     const source = await addWikiSourceDocument(config, {
       title: "Raw Memo",
@@ -1263,7 +1311,7 @@ type: note
   });
 });
 
-async function createWorkspace(config: { wikiPath: string }): Promise<string> {
+async function createWorkspace(config: { wikiPath: string; dateFormat?: string }): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "thoth-test-"));
   tempDirectories.push(root);
 

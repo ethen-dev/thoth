@@ -110,6 +110,11 @@ export const validWikiRelationTypes = [
   "has_verification",
 ] as const;
 
+/** The portable wiki status catalog. Existing values remain valid for compatibility. */
+export const validWikiStatuses = [
+  "draft", "active", "review", "accepted", "captured", "completed", "archived",
+] as const;
+
 export const validLogKinds = [
   "implementation",
   "decision",
@@ -127,6 +132,7 @@ export const validLogKinds = [
 const validWikiDocumentTypeSet = new Set<string>(validWikiDocumentTypes);
 const validWikiCaptureDocumentTypeSet = new Set<string>(validWikiCaptureDocumentTypes);
 const validWikiRelationTypeSet = new Set<string>(validWikiRelationTypes);
+const validWikiStatusSet = new Set<string>(validWikiStatuses);
 const validLogKindSet = new Set<string>(validLogKinds);
 
 export type WikiStatus = {
@@ -359,12 +365,12 @@ async function initializeWikiUnsafe(
 
   const index = await writeFileIfMissing(
     path.join(config.resolvedWikiPath, "index.md"),
-    createWikiIndex(), { workspaceRoot: config.resolvedWikiPath },
+    createWikiIndex(config.dateFormat), { workspaceRoot: config.resolvedWikiPath },
   );
 
   const log = await writeFileIfMissing(
     path.join(config.resolvedWikiPath, "log.md"),
-    createWikiLog(), { workspaceRoot: config.resolvedWikiPath },
+    createWikiLog(config.dateFormat), { workspaceRoot: config.resolvedWikiPath },
   );
 
   const status = await getWikiStatus(config);
@@ -420,6 +426,7 @@ async function captureWikiDocumentUnsafe(
   const id = input.id ?? `${type}-${slugify(title)}`;
 
   assertValidDocumentType(type);
+  assertValidStatus(status);
   assertValidCaptureDocumentType(type);
 
   let projectSlug: string | undefined;
@@ -446,7 +453,7 @@ async function captureWikiDocumentUnsafe(
     status,
     tags: input.tags ?? [],
     content: input.content,
-    date: currentDate(),
+    date: currentDate(config.dateFormat),
     related: projectSlug ? [{ id: input.projectId as string, relation: "belongs_to" }] : [],
   });
   const result = await writeFileIfMissing(filePath, markdown, { workspaceRoot: config.resolvedWikiPath });
@@ -479,6 +486,8 @@ async function addWikiSourceDocumentUnsafe(
   const status = input.status ?? config.defaultStatus;
   const id = input.id ?? `${type}-${slugify(title)}`;
 
+  assertValidStatus(status);
+
   validateDocumentId(type, id);
 
   const directory = directoryForType(type);
@@ -490,7 +499,7 @@ async function addWikiSourceDocumentUnsafe(
     status,
     tags: input.tags ?? [],
     content: input.content,
-    date: currentDate(),
+    date: currentDate(config.dateFormat),
   });
   const result = await writeFileIfMissing(filePath, markdown, { workspaceRoot: config.resolvedWikiPath });
 
@@ -532,6 +541,7 @@ async function updateWikiDocumentUnsafe(
   }
 
   if (input.status) {
+    assertValidStatus(input.status);
     metadata.status = input.status;
   }
 
@@ -539,8 +549,8 @@ async function updateWikiDocumentUnsafe(
     metadata.tags = mergeTags(readStringArray(metadata.tags), input.tags);
   }
 
-  normalizeDateMetadata(metadata);
-  metadata.updated_at = currentDate();
+  normalizeDateMetadata(metadata, config.dateFormat);
+  metadata.updated_at = currentDate(config.dateFormat);
 
   await assertValidUpdatedDocumentRelations(config.resolvedWikiPath, input.id, metadata);
 
@@ -577,8 +587,8 @@ async function appendWikiDocumentUnsafe(
   const section = input.section ?? "Notes";
   const content = appendToSection(parsed.content, section, input.content);
 
-  normalizeDateMetadata(metadata);
-  metadata.updated_at = currentDate();
+  normalizeDateMetadata(metadata, config.dateFormat);
+  metadata.updated_at = currentDate(config.dateFormat);
 
   await atomicWriteFile(located.path, matter.stringify(content, metadata), { workspaceRoot: config.resolvedWikiPath });
 
@@ -613,10 +623,10 @@ async function appendLogEntryUnsafe(
     projectId = input.projectId;
   }
 
-  const entry = createLogEntryMarkdown({ content, kind, ref: input.ref });
+  const entry = createLogEntryMarkdown({ content, kind, ref: input.ref, dateFormat: config.dateFormat });
 
   const globalPath = path.join(config.resolvedWikiPath, "log.md");
-  const globalBase = await pathExists(globalPath) ? await readFile(globalPath, "utf8") : createWikiLog();
+  const globalBase = await pathExists(globalPath) ? await readFile(globalPath, "utf8") : createWikiLog(config.dateFormat);
   const batch: { filePath: string; content: string }[] = [{
     filePath: globalPath,
     content: appendLogText(globalBase, entry),
@@ -637,7 +647,7 @@ async function appendLogEntryUnsafe(
         id: `timeline-${projectId}`,
         title: `Timeline ${projectId}`,
         projectId,
-        date: currentDate(),
+        date: currentDate(config.dateFormat),
       });
     batch.push({ filePath: timelineFilePath, content: appendLogText(timelineBase, entry) });
     timelinePath = timelineRelativePath;
@@ -677,7 +687,7 @@ async function relateWikiDocumentsUnsafe(
     throw new Error(`Target document not found: ${input.targetId}`);
   }
 
-  const update = prepareRelationUpdate(source, target, input);
+  const update = prepareRelationUpdate(source, target, input, config.dateFormat);
   if (update.content !== undefined) await atomicWriteFile(source.path, update.content, { workspaceRoot: config.resolvedWikiPath });
 
   return {
@@ -693,6 +703,7 @@ function prepareRelationUpdate(
   source: { path: string; document: WikiDocument },
   target: { path: string; document: WikiDocument },
   input: WikiRelateInput,
+  dateFormat = "YYYY-MM-DD",
 ): { created: boolean; content?: string } {
   const parsed = matter(source.document.raw);
   const metadata = { ...(parsed.data as Record<string, unknown>) };
@@ -702,8 +713,8 @@ function prepareRelationUpdate(
   const exists = relations.some((relation) => relation.id === input.targetId && relation.relation === input.relation);
   if (exists) return { created: false };
   metadata.related = [...relations, { id: input.targetId, relation: input.relation }];
-  normalizeDateMetadata(metadata);
-  metadata.updated_at = currentDate();
+  normalizeDateMetadata(metadata, dateFormat);
+  metadata.updated_at = currentDate(dateFormat);
   const content = appendMarkdownRelation(parsed.content, {
     relation: input.relation,
     targetTitle: target.document.title,
@@ -741,12 +752,12 @@ async function linkWikiSourceDocumentUnsafe(
     sourceId,
     targetId,
     relation: "source_for",
-  });
+  }, config.dateFormat);
   const targetUpdate = prepareRelationUpdate(target, source, {
     sourceId: targetId,
     targetId: sourceId,
     relation: "derived_from",
-  });
+  }, config.dateFormat);
   const batch = [
     ...(sourceUpdate.content === undefined ? [] : [{ filePath: source.path, content: sourceUpdate.content }]),
     ...(targetUpdate.content === undefined ? [] : [{ filePath: target.path, content: targetUpdate.content }]),
@@ -997,14 +1008,14 @@ async function rebuildHumanWikiIndexUnsafe(
       const categoryPath = `index-${type}.md`;
       await atomicWriteFile(
         path.join(config.resolvedWikiPath, categoryPath),
-        createHumanCategoryIndex(humanIndexSections.find((section) => section.type === type)?.heading ?? `${type[0]?.toUpperCase() ?? ""}${type.slice(1)}`, type, categoryDocuments, canonicalDocuments),
+        createHumanCategoryIndex(humanIndexSections.find((section) => section.type === type)?.heading ?? `${type[0]?.toUpperCase() ?? ""}${type.slice(1)}`, type, categoryDocuments, canonicalDocuments, config.dateFormat),
         { workspaceRoot: config.resolvedWikiPath },
       );
       categoryPagePaths.push(categoryPath);
     }
   }
 
-  await atomicWriteFile(indexPath, createHumanWikiIndex(documents, categoryPagePaths, canonicalDocuments), { workspaceRoot: config.resolvedWikiPath });
+  await atomicWriteFile(indexPath, createHumanWikiIndex(documents, categoryPagePaths, canonicalDocuments, config.dateFormat), { workspaceRoot: config.resolvedWikiPath });
 
   return {
     documentsIndexed: documents.length,
@@ -1065,8 +1076,8 @@ async function syncWikiRelationLinksUnsafe(
     }
 
     if (documentLinksCreated > 0) {
-      normalizeDateMetadata(metadata);
-      metadata.updated_at = currentDate();
+      normalizeDateMetadata(metadata, config.dateFormat);
+      metadata.updated_at = currentDate(config.dateFormat);
       await atomicWriteFile(
         path.join(config.resolvedWikiPath, document.path),
         matter.stringify(content, metadata),
@@ -1125,6 +1136,10 @@ export async function lintWikiDocuments(
         path: document.path,
         message: `Invalid document type: ${document.type}`,
       });
+    }
+
+    if (hasStringMetadata(document.metadata, "status") && !validWikiStatusSet.has(document.status)) {
+      issues.push({ path: document.path, message: `Invalid document status: ${document.status}` });
     }
 
     const paths = ids.get(document.id) ?? [];
@@ -1532,12 +1547,12 @@ function mergeTags(existingTags: string[], newTags: string[]): string[] {
   return Array.from(new Set([...existingTags, ...newTags]));
 }
 
-function normalizeDateMetadata(metadata: Record<string, unknown>): void {
+function normalizeDateMetadata(metadata: Record<string, unknown>, dateFormat = "YYYY-MM-DD"): void {
   for (const field of ["created_at", "updated_at"]) {
     const value = metadata[field];
 
     if (value instanceof Date) {
-      metadata[field] = value.toISOString().slice(0, 10);
+      metadata[field] = formatDate(value, dateFormat);
     }
   }
 }
@@ -1612,8 +1627,8 @@ ${input.content}
 `;
 }
 
-function createWikiLog(): string {
-  const now = currentDate();
+function createWikiLog(dateFormat = "YYYY-MM-DD"): string {
+  const now = currentDate(dateFormat);
 
   return `---
 id: wiki-log
@@ -1634,8 +1649,9 @@ function createLogEntryMarkdown(input: {
   content: string;
   kind: string;
   ref?: string;
+  dateFormat: string;
 }): string {
-  const date = currentDate();
+  const date = currentDate(input.dateFormat);
   const lines = input.content
     .trim()
     .split("\n")
@@ -1671,8 +1687,18 @@ related:
 `;
 }
 
-function currentDate(): string {
-  return new Date().toISOString().slice(0, 10);
+function currentDate(dateFormat = "YYYY-MM-DD"): string {
+  return formatDate(new Date(), dateFormat);
+}
+
+function formatDate(date: Date, dateFormat: string): string {
+  const year = String(date.getUTCFullYear()).padStart(4, "0");
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return dateFormat
+    .replace("YYYY", year)
+    .replace("MM", month)
+    .replace("DD", day);
 }
 
 function yamlString(value: string): string {
@@ -1730,6 +1756,12 @@ function validateDocumentId(type: string, id: string): void {
 function assertValidDocumentType(type: string): void {
   if (!validWikiDocumentTypeSet.has(type)) {
     throw new Error(`Invalid document type: ${type}`);
+  }
+}
+
+function assertValidStatus(status: string): void {
+  if (!validWikiStatusSet.has(status)) {
+    throw new Error(`Invalid document status: ${status}`);
   }
 }
 
@@ -1836,10 +1868,8 @@ function assertValidSourceRelation(
   source: WikiDocumentSummary,
   target: WikiDocumentSummary,
 ): void {
-  if (relation === "source_for" && source.type !== "source") {
-    throw new Error("Relation source_for must originate from a source document");
-  }
-
+  const invalid = relationConstraintError(relation, source.type, target.type);
+  if (invalid) throw new Error(invalid);
 }
 
 function assertValidSourceTypeTransition(currentType: string, nextType: string): void {
@@ -1866,11 +1896,11 @@ async function assertValidUpdatedDocumentRelations(
 
   for (const relation of outgoingRelations) {
     assertValidRelationType(relation.relation);
+    const target = await findWikiDocumentById(wikiPath, relation.id);
+    if (!target) continue;
 
-    if (relation.relation === "source_for" && updatedType !== "source") {
-      throw new Error("Relation source_for must originate from a source document");
-    }
-
+    const invalid = relationConstraintError(relation.relation, updatedType, target.document.type);
+    if (invalid) throw new Error(invalid);
   }
 }
 
@@ -1881,14 +1911,41 @@ function validateSourceRelationIssues(
 ): WikiLintIssue[] {
   const issues: WikiLintIssue[] = [];
 
-  if (relation.relation === "source_for" && source.type !== "source") {
+  const message = relationConstraintError(relation.relation, source.type, target.type);
+  if (message) {
     issues.push({
       path: source.path,
-      message: "Invalid source relation: source_for must originate from a source document",
+      message: relation.relation === "source_for"
+        ? `Invalid source relation: ${message}`
+        : `Invalid relation: ${message}`,
     });
   }
 
   return issues;
+}
+
+function relationConstraintError(relation: string, sourceType: string, targetType: string): string | undefined {
+  const allowed: Record<string, { source: string[]; target: string[]; description: string }> = {
+    source_for: { source: ["source"], target: validWikiDocumentTypes.filter((type) => type !== "source"), description: "source_for must originate from source and target a non-source document" },
+    // Historical workspaces also use this relation from a source to another
+    // document; keep that form valid while source_for remains directional.
+    derived_from: { source: [...validWikiDocumentTypes], target: [...validWikiDocumentTypes], description: "derived_from must link a document to a prior document" },
+    // Existing wikis use belongs_to for project notes, decisions, subareas,
+    // and implementation/project documents in addition to tasks and timelines.
+    belongs_to: {
+      source: ["note", "decision", "project", "implementation", "research", "idea", "session", "entity", "reference", "task", "timeline"],
+      target: ["project"],
+      description: "belongs_to must link a project document, note, decision, subarea, task, or timeline to a project",
+    },
+    has_subarea: { source: ["project"], target: ["project"], description: "has_subarea must link a project to a project" },
+    has_implementation: { source: ["project", "decision", "task"], target: ["implementation"], description: "has_implementation must target an implementation" },
+    implements: { source: ["implementation"], target: ["project", "decision", "task", "reference"], description: "implements must originate from an implementation" },
+    verifies: { source: ["implementation", "decision", "task", "research", "note", "reference"], target: ["implementation", "decision", "task", "project", "note", "reference"], description: "verifies must link a verification-capable document to a verifiable document" },
+  };
+  const rule = allowed[relation];
+  if (!rule || (rule.source.includes(sourceType) && rule.target.includes(targetType))) return undefined;
+  if (relation === "source_for" && sourceType !== "source") return "source_for must originate from a source document";
+  return rule?.description;
 }
 
 function createSnippet(text: string, normalizedQuery: string): string {
@@ -1907,14 +1964,15 @@ function createSnippet(text: string, normalizedQuery: string): string {
   return `${prefix}${compactText.slice(start, end)}${suffix}`.slice(0, 500);
 }
 
-function createWikiIndex(): string {
+function createWikiIndex(dateFormat = "YYYY-MM-DD"): string {
+  const now = currentDate(dateFormat);
   return `---
 id: wiki-index
 title: T.H.O.T.H. Wiki Index
 type: reference
 status: active
-created_at: 2026-08-03
-updated_at: 2026-08-03
+created_at: ${now}
+updated_at: ${now}
 tags:
   - index
 source: generated
@@ -1989,8 +2047,8 @@ function createHumanEntry(document: WikiDocument, documentsById: Map<string, Wik
   return `- [${document.title}](${toPosixPath(document.path)}) — ${documentSummary(document)} · status: ${document.status}${sources}`;
 }
 
-function createHumanWikiIndex(documents: WikiDocument[], categoryPagePaths: string[] = [], graphDocuments = documents): string {
-  const now = currentDate();
+function createHumanWikiIndex(documents: WikiDocument[], categoryPagePaths: string[] = [], graphDocuments = documents, dateFormat = "YYYY-MM-DD"): string {
+  const now = currentDate(dateFormat);
   const documentsById = new Map(graphDocuments.map((document) => [document.id, document]));
   const sections = humanIndexSections
     .map((section) => {
@@ -2052,10 +2110,10 @@ Este indice se regenera con \`thoth index --human\` e incluye enlaces por tipo y
 `;
 }
 
-function createHumanCategoryIndex(heading: string, type: string, documents: WikiDocument[], graphDocuments = documents): string {
+function createHumanCategoryIndex(heading: string, type: string, documents: WikiDocument[], graphDocuments = documents, dateFormat = "YYYY-MM-DD"): string {
   const documentsById = new Map(graphDocuments.map((document) => [document.id, document]));
   const entries = documents.map((document) => createHumanEntry(document, documentsById)).join("\n");
-  const now = currentDate();
+  const now = currentDate(dateFormat);
   return `---
 id: wiki-index-${type}
 title: ${heading} Index
