@@ -10,8 +10,8 @@ The current MVP is local-first. Markdown is the source of truth. `.thoth/index.j
 
 Usable local MVP components:
 
-- CLI: `init`, `status`, `list`, `show`, `capture`, `append`, `search`, `index`, `lint`, `update`, `relate`, `source`, `doctor`.
-- MCP stdio server: tools, resources, and the `capture_memory` prompt.
+- CLI: `init`, `status`, `list`, `show`, `capture`, `append`, `log`, `search`, `index`, `lint`, `sync-links`, `update`, `relate`, `source`, `doctor` and `agents`.
+- MCP stdio server with the implemented tools, resources, and `capture_memory` prompt listed below.
 - JSON Schemas for wiki documents and derived indexes.
 - External wiki support via `thoth.config.json`.
 
@@ -87,6 +87,7 @@ Search and relate knowledge:
 ```bash
 npm run dev -- search "durable context"
 npm run dev -- relate note-durable-context project-thoth --relation belongs_to
+npm run dev -- sync-links
 ```
 
 Capture a raw source and link it to a derived document:
@@ -125,6 +126,7 @@ Implemented MCP tools:
 - `wiki_relate`
 - `wiki_index`
 - `wiki_lint`
+- `wiki_log`
 
 Implemented MCP resources:
 
@@ -135,6 +137,19 @@ Implemented MCP prompts:
 
 - `capture_memory`
 
+MCP resources are `thoth://wiki/index` and `thoth://document/{id}`. The only
+implemented prompt is `capture_memory`; tools and resources are not prompts.
+
+## Agents and skills
+
+The `agents` CLI manages registry metadata: `agents list`, `agents show`,
+`agents register`, `agents unregister`, and `agents validate`. Entries declare
+metadata such as source, category, status, path, and runtime
+(`opencode`, `prompt`, or `external`); the registry does not execute agents.
+
+Skills are currently contracts and documentation for future runtime support;
+they are not an implemented CLI or MCP execution surface.
+
 ## Repository Map
 
 - `src/cli/`: CLI entrypoint.
@@ -143,7 +158,7 @@ Implemented MCP prompts:
 - `src/wiki/`: Markdown wiki workspace implementation.
 - `schemas/`: portable JSON Schemas.
 - `docs/`: architecture, data model, CLI and MCP documentation.
-- `agents/` and `skills/`: future agent and skill contracts.
+- `agents/`: agent definitions and registry; `skills/`: future contracts and documentation.
 - `examples/minimal-workspace/`: compact runnable workspace/wiki example.
 
 ## Verification

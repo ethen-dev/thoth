@@ -1,6 +1,10 @@
 # MCP Configuration
 
-`thoth-mcp` is a stdio MCP server. It must run from a workspace that contains `thoth.config.json`, because the server resolves the wiki path from that config.
+`thoth-mcp` is a stdio MCP server. It resolves the wiki path from
+`thoth.config.json`. Keeping that file in the server's `cwd` is recommended,
+but it is not required: configuration can also be selected with
+`THOTH_CONFIG`, or resolved through the supported global fallback at
+`~/Documents/Thoth/workspace/thoth.config.json`.
 
 ## Prerequisites
 
@@ -33,7 +37,7 @@ Use this shape for clients that support `command`, `args`, and `cwd`:
 }
 ```
 
-The `cwd` directory should contain `thoth.config.json`:
+The recommended `cwd` directory contains `thoth.config.json`:
 
 ```json
 {
@@ -83,6 +87,7 @@ Tools:
 - `wiki_relate`
 - `wiki_index`
 - `wiki_lint`
+- `wiki_log`
 
 Resources:
 
@@ -93,8 +98,15 @@ Prompts:
 
 - `capture_memory`
 
+Alternatively, point the client process at a configuration file explicitly:
+
+```bash
+THOTH_CONFIG=/absolute/path/to/thoth.config.json thoth-mcp
+```
+
 ## Troubleshooting
 
-- If tools fail with config errors, check `cwd` and `thoth.config.json`.
+- If tools fail with config errors, check `THOTH_CONFIG`, `cwd`, and the global
+  fallback path.
 - If schema lint fails after install, verify that the package includes `schemas/`.
 - If the process exits immediately, run `node dist/mcp/server.js --version` from the same `cwd`.
