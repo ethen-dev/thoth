@@ -20,6 +20,7 @@ import {
   searchWikiDocuments,
   syncWikiRelationLinks,
   updateWikiDocument,
+  validWikiRelationTypes,
 } from "../src/wiki/index.js";
 
 const tempDirectories: string[] = [];
@@ -594,6 +595,31 @@ status: active
       path: "notes/bad-source-for.md",
       message: "Invalid source relation: source_for must originate from a source document",
     });
+  });
+
+  it("keeps historical relation types in code and JSON schemas", async () => {
+    const historicalRelations = [
+      "applies_to",
+      "updates",
+      "complements",
+      "refines",
+      "extends",
+      "follows",
+      "implements",
+      "fixes",
+      "parallels",
+      "verifies",
+      "documents",
+      "has_log",
+      "has_subarea",
+      "has_verification",
+    ];
+    const relationSchema = JSON.parse(await readFile(path.join(process.cwd(), "schemas", "wiki-relation.schema.json"), "utf8"));
+    const relationsIndexSchema = JSON.parse(await readFile(path.join(process.cwd(), "schemas", "wiki-relations-index.schema.json"), "utf8"));
+
+    expect(validWikiRelationTypes).toEqual(expect.arrayContaining(historicalRelations));
+    expect(relationSchema.properties.relation.enum).toEqual(expect.arrayContaining(historicalRelations));
+    expect(relationsIndexSchema.properties.relations.items.properties.relation.enum).toEqual(expect.arrayContaining(historicalRelations));
   });
 
   it("syncs Markdown relation links from existing frontmatter relations", async () => {

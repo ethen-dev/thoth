@@ -84,6 +84,20 @@ export const validWikiRelationTypes = [
   "derived_from",
   "source_for",
   "supersedes",
+  "applies_to",
+  "updates",
+  "complements",
+  "refines",
+  "extends",
+  "follows",
+  "implements",
+  "fixes",
+  "parallels",
+  "verifies",
+  "documents",
+  "has_log",
+  "has_subarea",
+  "has_verification",
 ] as const;
 
 const validWikiDocumentTypeSet = new Set<string>(validWikiDocumentTypes);

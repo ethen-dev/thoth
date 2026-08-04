@@ -145,12 +145,28 @@ Relaciones iniciales:
 - `continues`: continua un documento previo
 - `contradicts`: contradice o entra en conflicto con otro documento
 - `supports`: apoya o refuerza otra informacion
+- `references`: referencia otro documento o fuente
 - `related_to`: relacion generica cuando no aplica un tipo mas especifico
+- `has_note`: contiene o agrupa una nota relacionada
+- `has_decision`: contiene o agrupa una decision relacionada
+- `has_implementation`: contiene o agrupa una implementacion relacionada
 - `derived_from`: deriva de una fuente o documento previo
 - `source_for`: indica que un documento `source` sirve como fuente raw para otro documento
 - `supersedes`: reemplaza o deja obsoleto un documento previo
-
-Tambien se preservan relaciones ya usadas por wikis iniciales o documentacion: `references`, `has_note`, `has_decision` y `has_implementation`.
+- `applies_to`: aplica a un documento, area o contexto especifico
+- `updates`: actualiza informacion previa
+- `complements`: complementa informacion relacionada
+- `refines`: precisa o mejora informacion previa
+- `extends`: extiende el alcance de otro documento
+- `follows`: sigue una secuencia o trabajo previo
+- `implements`: implementa una decision, especificacion o plan
+- `fixes`: corrige un problema identificado
+- `parallels`: describe una linea paralela de trabajo o conocimiento
+- `verifies`: verifica una afirmacion, implementacion o resultado
+- `documents`: documenta un componente, decision o proceso
+- `has_log`: contiene o agrupa un log relacionado
+- `has_subarea`: contiene o agrupa una subarea relacionada
+- `has_verification`: contiene o agrupa una verificacion relacionada
 
 Restricciones semanticas minimas:
 

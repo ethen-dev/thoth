@@ -26,7 +26,21 @@
         "has_implementation",
         "derived_from",
         "source_for",
-        "supersedes"
+        "supersedes",
+        "applies_to",
+        "updates",
+        "complements",
+        "refines",
+        "extends",
+        "follows",
+        "implements",
+        "fixes",
+        "parallels",
+        "verifies",
+        "documents",
+        "has_log",
+        "has_subarea",
+        "has_verification"
       ]
     }
   }

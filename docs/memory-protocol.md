@@ -185,6 +185,20 @@ Relaciones iniciales:
 - `derived_from`
 - `source_for`
 - `supersedes`
+- `applies_to`
+- `updates`
+- `complements`
+- `refines`
+- `extends`
+- `follows`
+- `implements`
+- `fixes`
+- `parallels`
+- `verifies`
+- `documents`
+- `has_log`
+- `has_subarea`
+- `has_verification`
 
 Si una relacion implica contradiccion, reemplazo o cambio de decision, T.H.O.T.H. debe pedir confirmacion antes de marcarla como canonica.
 
