@@ -17,6 +17,7 @@ const intentActions: Record<string, CoreAction> = {
 const writeActions = new Set<CoreAction>(["wiki.index", "wiki.capture", "wiki.update", "wiki.append", "wiki.relate", "wiki.log", "wiki.source.add", "wiki.source.link"]);
 const nonAtomicActions = new Set<CoreAction>(["wiki.index", "wiki.relate", "wiki.log", "wiki.source.link"]);
 const actionSet = new Set<CoreAction>([...Object.values(intentActions), ...writeActions]);
+const emptyFilter = z.preprocess((value) => value === "" ? undefined : value, z.string().min(1).optional());
 
 export function planIntent(_config: ResolvedThothConfig, request: IntentRequest): ThothPlan {
   const intent = request?.intent;
@@ -98,7 +99,7 @@ async function executeStep(config: ResolvedThothConfig, step: PlanStep): Promise
 
 function validateStepInput(intent: string, value: unknown, action: CoreAction): { value?: unknown; error?: CoreError } {
   const schemas: Record<string, z.ZodType> = {
-    query: z.object({ query: z.string().trim().min(1).max(500), type: z.string().min(1).max(80).optional(), status: z.string().min(1).max(80).optional(), tag: z.string().min(1).max(120).optional() }).strict(),
+    query: z.object({ query: z.string().trim().min(1).max(500), type: emptyFilter, status: emptyFilter, tag: emptyFilter, limit: z.number().int().min(1).max(20).default(20) }).strict(),
     list: z.object({ type: z.string().optional(), status: z.string().optional(), tag: z.string().optional() }).strict(),
     show: z.object({ id: z.string().trim().min(1), mode: z.enum(["content", "metadata", "raw"]).optional() }).strict(),
     lint: z.object({}).strict(), index: z.object({}).strict(),

@@ -23,7 +23,6 @@ import {
   rebuildHumanWikiIndex,
   rebuildWikiIndex,
   runWikiDoctor,
-  searchWikiDocuments,
   syncWikiRelationLinks,
   updateWikiDocument,
   validLogKinds,
@@ -33,6 +32,7 @@ import {
 } from "../actions/index.js";
 import { executePlan, loadConfig, planIntent, type IntentRequest, type ThothPlan } from "../core/index.js";
 import { discoverSkills, getSkill, runSkill, validateSkills } from "../skills/index.js";
+import { formatCliSearch, runCliSearch } from "./search.js";
 
 const thothVersion = "0.6.0";
 const program = new Command();
@@ -288,19 +288,15 @@ program
       try {
         const config = await loadConfig();
         const limit = Number(options.limit);
-        const results = await searchWikiDocuments(config, query, { ...options, limit });
+        const results = await runCliSearch(config, {
+          query,
+          type: options.type,
+          status: options.status,
+          tag: options.tag,
+          limit,
+        });
 
-        if (results.length === 0) {
-          console.log("No wiki documents matched.");
-          return;
-        }
-
-        for (const result of results) {
-          console.log(
-            `${result.id}\t${result.type}\t${result.status}\t${result.title}\t${result.path}`,
-          );
-          console.log(`  ${result.snippet}`);
-        }
+        console.log(formatCliSearch(results));
       } catch (error) {
         reportError(error);
       }

@@ -25,6 +25,8 @@ describe("MCP server", () => {
     const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
     const config = await loadConfig(workspacePath);
     await initializeWiki(config);
+    await mkdir(path.join(config.resolvedWikiPath, "notes"), { recursive: true });
+    await writeFile(path.join(config.resolvedWikiPath, "notes", "match.md"), "---\nid: note-match\ntitle: Match\ntype: note\nstatus: active\ntags: [keep]\n---\nneedle\n", "utf8");
     process.chdir(workspacePath);
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -62,6 +64,7 @@ describe("MCP server", () => {
       const coreMalformedResult = await client.callTool({ name: "core_execute", arguments: { plan: [] } });
       const coreCrossedResult = await client.callTool({ name: "core_plan", arguments: { intent: "query", action: "wiki.show", input: { id: "wiki-index" } } });
       const legacySearchResult = await client.callTool({ name: "wiki_search", arguments: { query: "not-present", limit: 1 } });
+      const migratedSearchResult = await client.callTool({ name: "wiki_search", arguments: { query: "needle", status: "active", tag: "keep", limit: 1 } });
       const longSearchResult = await client.callTool({ name: "wiki_search", arguments: { query: "x".repeat(501) } });
       const wikiCaptureTool = tools.tools.find((tool) => tool.name === "wiki_capture");
       const wikiUpdateTool = tools.tools.find((tool) => tool.name === "wiki_update");
@@ -100,6 +103,9 @@ describe("MCP server", () => {
       expect(JSON.parse(coreCrossedResult.content[0]?.type === "text" ? coreCrossedResult.content[0].text : "{}")).toMatchObject({ status: "error", error: { code: "not_allowlisted" } });
       const legacySearch = JSON.parse(legacySearchResult.content[0]?.type === "text" ? legacySearchResult.content[0].text : "{}");
       expect(legacySearch.results).toEqual([]);
+      const migratedSearch = JSON.parse(migratedSearchResult.content[0]?.type === "text" ? migratedSearchResult.content[0].text : "{}");
+      expect(migratedSearch.results).toEqual([expect.objectContaining({ id: "note-match", snippet: expect.any(String) })]);
+      expect(migratedSearch.results[0]).not.toHaveProperty("content");
       expect(longSearchResult.isError).toBe(true);
       expect(resourceTemplates.resourceTemplates.map((template) => template.uriTemplate))
         .toContain("thoth://document/{id}");
@@ -116,7 +122,7 @@ describe("MCP server", () => {
       expect(skillRunTool?.annotations?.idempotentHint).toBeUndefined();
       expect(wikiSearchTool?.annotations).toMatchObject({ readOnlyHint: true, idempotentHint: true });
       expect(JSON.parse(lintResult.content[0]?.type === "text" ? lintResult.content[0].text : "{}"))
-        .toMatchObject({ documentsChecked: 2, issues: [] });
+        .toMatchObject({ documentsChecked: 3, issues: [] });
     } finally {
       await client.close();
       await server.close();

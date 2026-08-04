@@ -71,7 +71,8 @@ CLI/MCP expose the contract but do not discover one. The adapter is trusted,
 not a sandbox. Shell, Markdown bodies, and implicit providers are never run.
 
 `skill_run` uses the same inputs and outputs as the CLI: `wiki-query` accepts
-`query`, optional `type`, `status`, and `tag`; `wiki-lint` accepts `{}`.
+`query`, optional `type`, `status`, `tag`, and `limit`; `limit` is an integer
+from 1 to 20 and defaults to 20. `wiki-lint` accepts `{}`.
 Query outputs are summaries only and omit full content, raw Markdown, and
 metadata.
 Snippets are whitespace-normalized and limited to 500 characters.
@@ -89,7 +90,9 @@ confirmación y las acciones no atómicas se rechazan. Las tools MCP legacy
 siguen existiendo por compatibilidad y aún no están migradas al Core; el Core
 no constituye una garantía global sobre todas las tools.
 
-`wiki_search` es una superficie legacy independiente del Core: devuelve
-resultados resumidos, acepta `limit` opcional y aplica máximo 20 (por defecto
-20). El Core rechaza acciones multiarchivo sin transacción.
-Las herramientas MCP antiguas siguen existiendo.
+`wiki_search` ya usa el intent Core `query` mediante un adaptador compartido:
+conserva resultados resumidos, `limit` opcional entero de 1 a 20 (por defecto
+20), filtros `type`, `status` y `tag`, además de su envoltura JSON/content.
+Solo `wiki_search` está migrada en este slice; las demás tools MCP siguen
+siendo superficies legacy sin migrar al Core. El Core rechaza acciones
+multiarchivo sin transacción.

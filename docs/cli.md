@@ -32,7 +32,7 @@ anteriores siguen disponibles sin cambios.
 - `thoth capture <content> [--type <type>] [--title <title>] [--status <status>] [--project <id>] [--tag <tag>]...`
 - `thoth append <id> <content> [--section <section>]` (por defecto,
   `Notes`).
-- `thoth search <query> [--type <type>] [--status <status>] [--tag <tag>] [--limit <1-20>]`
+- `thoth search <query> [--type <type>] [--status <status>] [--tag <tag>] [--limit <1-20>]`; `query` admite de 1 a 500 caracteres y `--limit` es un entero opcional de 1 a 20 (por defecto 20).
 - `thoth update <id> [--title <title>] [--type <type>] [--status <status>] [--tag <tag>]...`
 - `thoth relate <source> <target> --relation <relation>`
 
@@ -43,11 +43,16 @@ Las relaciones válidas son: `belongs_to`, `mentions`, `depends_on`,
 `extends`, `follows`, `implements`, `fixes`, `parallels`, `verifies`,
 `documents`, `has_log`, `has_subarea` y `has_verification`.
 
-La búsqueda devuelve solo `id`, título, tipo, estado, tags, ruta y snippet;
-`--limit` tiene máximo 20 y por defecto es 20. `capture` recibe contenido textual directo; no implementa `--file` ni
+La búsqueda aplica los filtros opcionales `type`, `status` y `tag` y devuelve
+solo `id`, título, tipo, estado, tags, ruta y snippet; el snippet es resumido y
+normalizado. `capture` recibe contenido textual directo; no implementa `--file` ni
 `--tags`, y las fuentes no se capturan con `--type source`. Las tareas
 requieren `--project` y un proyecto existente. `show` ofrece `--raw` y
 `--metadata`; no existe `--summary`.
+
+`search` es la única superficie CLI migrada en este slice: usa el intent Core
+`query` mediante un adaptador compartido y conserva su salida textual y código
+de error. Las demás superficies CLI siguen legacy.
 
 Los tipos documentales válidos son: `project`, `note`, `idea`, `decision`,
 `implementation`, `session`, `log`, `research`, `source`, `entity`,
@@ -130,7 +135,8 @@ thoth skills run wiki-query --input '{"query":"durable context"}'
 thoth skills run wiki-lint --input '{}'
 ```
 
-`wiki-query` accepts only `query` plus optional `type`, `status`, and `tag`.
+`wiki-query` accepts `query` plus optional `type`, `status`, `tag`, and `limit`.
+`limit` is an integer from 1 to 20 and defaults to 20.
 Its result contains summaries (`id`, `title`, `type`, `status`, `tags`, `path`,
 `snippet`), never full content, raw Markdown, or metadata. `wiki-lint` accepts
 an empty object. Snippets are whitespace-normalized and limited to 500

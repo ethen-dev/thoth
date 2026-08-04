@@ -5,7 +5,8 @@ import { getSkill } from "./registry.js";
 import type { SkillProviderAdapter, SkillProviderRequest, SkillResult, SkillRuntimeConfig, SkillInvocation } from "./types.js";
 import { z } from "zod/v4";
 
-const querySchema = z.object({ query: z.string().trim().min(1).max(500), type: z.string().min(1).max(80).optional(), status: z.string().min(1).max(80).optional(), tag: z.string().min(1).max(120).optional() }).strict();
+const emptyFilter = z.preprocess((value) => value === "" ? undefined : value, z.string().min(1).optional());
+const querySchema = z.object({ query: z.string().trim().min(1).max(500), type: emptyFilter, status: emptyFilter, tag: emptyFilter, limit: z.number().int().min(1).max(20).default(20) }).strict();
 const lintSchema = z.object({}).strict();
 const queryInput = (value: unknown) => querySchema.parse(value);
 const llmSkills = new Set(["wiki-ingest", "wiki-crystallize", "wiki-integrate", "wiki-config"]);

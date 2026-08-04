@@ -12,14 +12,13 @@ import {
   lintWikiDocuments,
   relateWikiDocuments,
   rebuildWikiIndex,
-  searchWikiDocuments,
   updateWikiDocument,
   validLogKinds,
   validWikiCaptureDocumentTypes,
   validWikiDocumentTypes,
   validWikiRelationTypes,
 } from "../actions/index.js";
-import { executePlan, loadConfig, planIntent } from "../core/index.js";
+import { executePlan, loadConfig, planIntent, queryThroughCore } from "../core/index.js";
 import { discoverSkills, getSkill, runSkill, validateSkills } from "../skills/index.js";
 
 export function createThothMcpServer(): McpServer {
@@ -121,7 +120,8 @@ export function createThothMcpServer(): McpServer {
     },
     async (input) => {
       const config = await loadConfig();
-      const results = await searchWikiDocuments(config, input.query, {
+      const results = await queryThroughCore(config, {
+        query: input.query,
         type: input.type,
         status: input.status,
         tag: input.tag,

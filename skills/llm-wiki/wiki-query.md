@@ -20,6 +20,7 @@ La invocación requiere un objeto con:
 - `type`: string opcional.
 - `status`: string opcional.
 - `tag`: string opcional.
+- `limit`: entero opcional entre 1 y 20; por defecto 20.
 
 No se aceptan otros campos.
 
@@ -44,5 +45,7 @@ No se aceptan otros campos.
 }
 ```
 
-No devuelve `content`, `raw`, `metadata`, relaciones, proyectos, topic keys,
-límites de resultados ni modos `summary`, `full` o `metadata`.
+La búsqueda aplica los filtros opcionales `type`, `status` y `tag`, y limita la
+respuesta a `limit` resultados (máximo 20). No devuelve `content`, `raw`,
+`metadata`, relaciones, proyectos, topic keys ni modos `summary`, `full` o
+`metadata`.
