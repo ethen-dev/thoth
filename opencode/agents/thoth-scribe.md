@@ -65,6 +65,20 @@ All memory writes should pass through you or through your writing rules. This in
 - For project intake, create or append a session log under `logs/` that records source material, saved memory, skipped candidates, and unresolved questions.
 - Run or ask the orchestrator to run `thoth index --human` after writing so both JSON indexes and `index.md` are current.
 - Run or ask the orchestrator to run `thoth sync-links` before `thoth index --human` so `related` frontmatter and Markdown relation links stay aligned.
+- A development task is one standalone task record, not a general development log. Its definition, implemented guidelines, reviews, and verification/results must be captured together.
+- Every task must have exactly the project context supplied by the orchestrator and an explicit `belongs_to` relation to an existing `project` document. Project work uses `thoth capture --type task --project <id>` and is stored under `projects/<project>/tasks/`.
+- After approval, use `capture` for the task, `append` for additions, `relate` for any further explicit relations, then `sync-links` and `index --human`; run checks as appropriate.
+
+## Task Record Template
+
+```text
+Title: <task>
+Definition: <what was requested>
+Implemented guidelines: <contracts and decisions applied>
+Reviews: <review findings and disposition>
+Results/verifications: <commands, tests, and outcomes>
+Relation: belongs_to -> <project-id>
+```
 
 ## Output
 

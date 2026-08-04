@@ -104,6 +104,8 @@ Development flow:
 5. Use `thoth-dev-verifier` to run real checks.
 6. Use `thoth-dev-receipt` for final delivery summaries.
 
+Al levantar cualquier subagente de desarrollo, añade como instrucción final que, al terminar, solicite o invoque `thoth-scribe` para registrar SOLO la tarea, incluyendo definición, directrices implementadas, revisiones y resultados/verificaciones. Para trabajo de proyecto, el registro debe guardarse bajo `projects/<project>/tasks/`. Si el subagente externo no puede delegar, debe devolver ese informe estructurado al orquestador para que lo registre.
+
 Agent registry commands are available through `thoth agents list`, `thoth agents show <id>`, `thoth agents register <path>`, `thoth agents unregister <id>`, and `thoth agents validate`.
 
 Project intake flow:

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -273,6 +273,89 @@ Visible content.
     expect(document?.content).toContain("Capture this durable note.");
     expect(document?.content).not.toContain("Different content should not overwrite.");
     expect(document?.tags).toEqual(["memory", "test"]);
+  });
+
+  it("captures project tasks under the project task directory and indexes Tasks", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    await captureWikiDocument(config, { id: "project-thoth", title: "Thoth", type: "project", content: "Project" });
+
+    const task = await captureWikiDocument(config, {
+      id: "task-minimal-support",
+      title: "Minimal support",
+      type: "task",
+      projectId: "project-thoth",
+      content: "Implement it.",
+    });
+    const index = await rebuildHumanWikiIndex(config);
+    const humanIndex = await readFile(path.join(config.resolvedWikiPath, "index.md"), "utf8");
+    const document = await getWikiDocumentById(config, task.id);
+    const lint = await lintWikiDocuments(config);
+
+    expect(task.path).toBe("projects/thoth/tasks/task-minimal-support.md");
+    expect(document?.metadata.related).toEqual([{ id: "project-thoth", relation: "belongs_to" }]);
+    expect(lint.issues).toEqual([]);
+    expect(index.documentsIndexed).toBe(2);
+    expect(humanIndex).toContain("## Tasks");
+    expect(humanIndex).toContain("projects/thoth/tasks/task-minimal-support.md");
+  });
+
+  it("derives task paths from nested project document locations", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    await mkdir(path.join(config.resolvedWikiPath, "projects", "nested-slug"), { recursive: true });
+    await writeFile(
+      path.join(config.resolvedWikiPath, "projects", "nested-slug", "project-nested.md"),
+      `---\nid: project-nested\ntitle: Nested\ntype: project\nstatus: active\n---\n\n# Nested\n`,
+      "utf8",
+    );
+
+    const task = await captureWikiDocument(config, {
+      id: "task-nested",
+      type: "task",
+      projectId: "project-nested",
+      content: "Nested task.",
+    });
+
+    expect(task.path).toBe("projects/nested-slug/tasks/task-nested.md");
+  });
+
+  it("rejects tasks without an existing project", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    await expect(captureWikiDocument(config, { type: "task", content: "Missing project" })).rejects.toThrow("require a projectId");
+    await expect(captureWikiDocument(config, { type: "task", projectId: "project-missing", content: "Missing project" })).rejects.toThrow("Project document not found");
+  });
+
+  it("rejects task projects reached through a symlink", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    const externalProjects = path.join(path.dirname(config.resolvedWikiPath), "external-projects");
+    await mkdir(externalProjects, { recursive: true });
+    await writeFile(
+      path.join(config.resolvedWikiPath, "projects", "project-linked.md"),
+      `---\nid: project-linked\ntitle: Linked\ntype: project\nstatus: active\n---\n`,
+      "utf8",
+    );
+    await symlink(
+      externalProjects,
+      path.join(config.resolvedWikiPath, "projects", "linked"),
+    );
+
+    await expect(captureWikiDocument(config, {
+      type: "task",
+      projectId: "project-linked",
+      content: "Should be rejected.",
+    })).rejects.toThrow("contains a symlink");
   });
 
   it("updates document metadata without changing content", async () => {

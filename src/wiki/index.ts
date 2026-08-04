@@ -14,4 +14,5 @@ export type WikiDocumentType =
   | "character"
   | "chapter"
   | "timeline"
-  | "reference";
+  | "reference"
+  | "task";

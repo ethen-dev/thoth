@@ -37,7 +37,8 @@
               "character",
               "chapter",
               "timeline",
-              "reference"
+              "reference",
+              "task"
             ]
           },
           "status": {

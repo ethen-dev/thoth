@@ -84,8 +84,11 @@ Tipos iniciales:
 - `chapter`
 - `timeline`
 - `reference`
+- `task`
 
 El lint y las operaciones de escritura rechazan tipos fuera de este catalogo para mantener portabilidad.
+
+Las tareas de desarrollo requieren `projectId` y se almacenan bajo `projects/<project-slug>/tasks/`; su relación `belongs_to` con el proyecto es obligatoria.
 
 ### status
 

@@ -201,6 +201,7 @@ export function createThothMcpServer(): McpServer {
         type: z.enum(validWikiCaptureDocumentTypes).optional(),
         status: z.string().optional(),
         tags: z.array(z.string()).optional(),
+        projectId: z.string().optional(),
       },
       annotations: {
         readOnlyHint: false,

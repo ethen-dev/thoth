@@ -30,7 +30,8 @@
         "character",
         "chapter",
         "timeline",
-        "reference"
+        "reference",
+        "task"
       ]
     },
     "status": {
@@ -62,5 +63,35 @@
         "$ref": "wiki-relation.schema.json"
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "const": "task"
+          }
+        }
+      },
+      "then": {
+        "required": ["related"],
+        "properties": {
+          "related": {
+            "type": "array",
+            "minItems": 1,
+            "contains": {
+              "type": "object",
+              "properties": {
+                "relation": {
+                  "const": "belongs_to"
+                }
+              },
+              "required": ["relation"]
+            }
+          }
+        }
+      }
+    }
+  ]
 }

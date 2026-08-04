@@ -155,6 +155,7 @@ program
   .option("--type <type>", captureDocumentTypeHelp)
   .option("--title <title>", "Document title")
   .option("--status <status>", "Document status")
+  .option("--project <id>", "Project id (required for tasks)")
   .option("--tag <tag>", "Document tag. Can be used multiple times", collectValues, [])
   .action(
     async (
@@ -164,6 +165,7 @@ program
         title?: string;
         status?: string;
         tag?: string[];
+        project?: string;
       },
     ) => {
       try {
@@ -174,6 +176,7 @@ program
           type: options.type,
           status: options.status,
           tags: options.tag,
+          projectId: options.project,
         });
 
         console.log(`Document: ${result.id}`);

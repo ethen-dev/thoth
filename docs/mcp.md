@@ -96,7 +96,7 @@ Herramientas implementadas inicialmente:
 - `wiki_lint`
 - `wiki_log`
 
-Todas reutilizan las acciones internas compartidas con la CLI. `wiki_capture` no acepta `type: source`; las fuentes raw deben entrar por el flujo `source add` de la CLI. `wiki_log` anade una entrada al log global y, con `project`, tambien a la timeline del proyecto.
+Todas reutilizan las acciones internas compartidas con la CLI. `wiki_capture` no acepta `type: source`; las fuentes raw deben entrar por el flujo `source add` de la CLI. Para `type: task`, `wiki_capture` requiere `projectId` apuntando a un documento `project` existente; la tarea se guarda bajo `projects/<slug>/tasks/<id>.md` y recibe una relación `belongs_to` automática. `wiki_log` anade una entrada al log global y, con `project`, tambien a la timeline del proyecto.
 
 Resources implementados inicialmente:
 

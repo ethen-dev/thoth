@@ -104,6 +104,7 @@ thoth capture "Idea para un sistema de agentes personales"
 thoth capture --type idea "Crear una skill para resumir reuniones"
 thoth capture --file notes/session.md
 thoth capture --type note --title "Nota importante" --tag cli "Contenido a guardar"
+thoth capture --type task --project project-thoth --title "Implementar soporte" "Definicion y verificaciones"
 ```
 
 Responsabilidades:
@@ -123,9 +124,9 @@ Opciones iniciales:
 - `--tags`: etiquetas separadas por coma
 - `--tag`: etiqueta repetible
 - `--file`: archivo de entrada
-- `--project`: proyecto al que pertenece
+- `--project`: proyecto al que pertenece; obligatorio para `--type task`
 
-La primera implementacion soporta texto directo y `--tag` repetible. `--file`, `--project` y clasificacion automatica quedan para fases posteriores.
+Las tareas se guardan bajo `projects/<project-slug>/tasks/` y requieren un documento de proyecto existente.
 
 ### thoth list
 

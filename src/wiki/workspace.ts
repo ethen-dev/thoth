@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Ajv2020 } from "ajv/dist/2020.js";
@@ -29,6 +29,7 @@ const wikiDirectories = [
 
 const humanIndexSections = [
   { heading: "Projects", type: "project" },
+  { heading: "Tasks", type: "task" },
   { heading: "Decisions", type: "decision" },
   { heading: "Implementation", type: "implementation" },
   { heading: "Logs", type: "log" },
@@ -56,6 +57,7 @@ export const validWikiDocumentTypes = [
   "chapter",
   "timeline",
   "reference",
+  "task",
 ] as const;
 
 export const validWikiCaptureDocumentTypes = [
@@ -72,6 +74,7 @@ export const validWikiCaptureDocumentTypes = [
   "chapter",
   "timeline",
   "reference",
+  "task",
 ] as const;
 
 export const validWikiRelationTypes = [
@@ -167,6 +170,7 @@ export type WikiCaptureInput = {
   type?: string;
   status?: string;
   tags?: string[];
+  projectId?: string;
 };
 
 export type WikiCaptureResult = {
@@ -402,11 +406,21 @@ export async function captureWikiDocument(
   assertValidDocumentType(type);
   assertValidCaptureDocumentType(type);
 
+  let projectSlug: string | undefined;
+  if (type === "task") {
+    if (!input.projectId) {
+      throw new Error("Task documents require a projectId");
+    }
+    projectSlug = await getProjectSlug(config, input.projectId);
+  }
+
   if (input.id) {
     validateDocumentId(type, id);
   }
 
-  const directory = directoryForType(type);
+  const directory = projectSlug
+    ? path.join("projects", projectSlug, "tasks")
+    : directoryForType(type);
   const relativePath = path.join(directory, `${id}.md`);
   const filePath = path.join(config.resolvedWikiPath, relativePath);
   const markdown = createWikiDocumentMarkdown({
@@ -417,6 +431,7 @@ export async function captureWikiDocument(
     tags: input.tags ?? [],
     content: input.content,
     date: currentDate(),
+    related: projectSlug ? [{ id: input.projectId as string, relation: "belongs_to" }] : [],
   });
   const result = await writeFileIfMissing(filePath, markdown);
 
@@ -1361,6 +1376,7 @@ function createWikiDocumentMarkdown(input: {
   tags: string[];
   content: string;
   date: string;
+  related: Array<{ id: string; relation: string }>;
 }): string {
   const tags = input.tags.length > 0
     ? `\n${input.tags.map((tag) => `  - ${yamlString(tag)}`).join("\n")}`
@@ -1375,7 +1391,7 @@ created_at: ${input.date}
 updated_at: ${input.date}
 tags:${tags}
 source: "manual"
-related: []
+related:${input.related.length === 0 ? " []" : `\n${input.related.map((relation) => `  - id: ${yamlString(relation.id)}\n    relation: ${yamlString(relation.relation)}`).join("\n")}`}
 ---
 
 # ${input.title}
@@ -1512,6 +1528,7 @@ function directoryForType(type: string): string {
     session: "sessions",
     source: "sources",
     timeline: "timelines",
+    task: "tasks",
   };
 
   return directories[type] ?? "notes";
@@ -1563,11 +1580,80 @@ function assertValidLogKind(kind: string): void {
 async function assertProjectExists(
   config: ResolvedThothConfig,
   projectId: string,
-): Promise<void> {
+): Promise<{ path: string; document: WikiDocument }> {
   const located = await findWikiDocumentById(config.resolvedWikiPath, projectId);
 
   if (!located || located.document.type !== "project") {
     throw new Error(`Project document not found: ${projectId} (expected type project)`);
+  }
+
+  return located;
+}
+
+async function getProjectSlug(
+  config: ResolvedThothConfig,
+  projectId: string,
+): Promise<string> {
+  const located = await assertProjectExists(config, projectId);
+  const relativePath = path.relative(config.resolvedWikiPath, located.path);
+  const parts = relativePath.split(path.sep);
+  const fileName = parts.at(-1) ?? "";
+
+  if (
+    parts[0] !== "projects"
+    || parts.some((part) => part === ".." || part === ".")
+    || !fileName.startsWith("project-")
+    || !fileName.endsWith(".md")
+  ) {
+    throw new Error(`Project document must be located under projects/: ${projectId}`);
+  }
+
+  let slug: string | undefined;
+  if (parts.length === 3) {
+    slug = parts[1];
+  } else if (parts.length === 2) {
+    slug = fileName.slice("project-".length, -".md".length);
+  }
+
+  if (!slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+    throw new Error(`Project document has an unsafe project slug: ${projectId}`);
+  }
+
+  const projectsPath = path.resolve(config.resolvedWikiPath, "projects");
+  const taskDirectory = path.resolve(projectsPath, slug, "tasks");
+  if (taskDirectory !== projectsPath && !taskDirectory.startsWith(`${projectsPath}${path.sep}`)) {
+    throw new Error(`Project document has an unsafe project path: ${projectId}`);
+  }
+
+  await rejectSymlinkComponents(projectsPath, located.path, projectId);
+  await rejectSymlinkComponents(projectsPath, taskDirectory, projectId);
+
+  return slug;
+}
+
+async function rejectSymlinkComponents(
+  rootPath: string,
+  targetPath: string,
+  projectId: string,
+): Promise<void> {
+  const relativeTarget = path.relative(rootPath, targetPath);
+  const components = relativeTarget ? relativeTarget.split(path.sep) : [];
+  let currentPath = rootPath;
+
+  for (const component of [rootPath, ...components]) {
+    currentPath = component === rootPath ? rootPath : path.join(currentPath, component);
+
+    try {
+      if ((await lstat(currentPath)).isSymbolicLink()) {
+        throw new Error(`Project path contains a symlink: ${projectId}`);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        break;
+      }
+
+      throw error;
+    }
   }
 }
 
