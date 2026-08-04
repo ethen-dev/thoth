@@ -20,6 +20,7 @@ import {
   validWikiRelationTypes,
 } from "../actions/index.js";
 import { loadConfig } from "../core/index.js";
+import { discoverSkills, getSkill, runSkill, validateSkills } from "../skills/index.js";
 
 export function createThothMcpServer(): McpServer {
   const server = new McpServer({
@@ -326,6 +327,16 @@ export function createThothMcpServer(): McpServer {
       return jsonResult(result);
     },
   );
+
+  server.registerTool("skill_list", { title: "List Skills", description: "List discovered skill metadata.", annotations: { readOnlyHint: true, idempotentHint: true } }, async () => jsonResult({ skills: (await discoverSkills(await loadConfig())).map(({ body: _body, ...manifest }) => manifest) }));
+  server.registerTool("skill_show", { title: "Show Skill", description: "Show one discovered skill without executing its Markdown body.", inputSchema: { id: z.string().min(1) }, annotations: { readOnlyHint: true, idempotentHint: true } }, async ({ id }) => {
+    const skill = await getSkill(await loadConfig(), id);
+    if (!skill) throw new Error(`Skill not found: ${id}`);
+    const { body: _body, ...manifest } = skill;
+    return jsonResult(manifest);
+  });
+  server.registerTool("skill_validate", { title: "Validate Skills", description: "Validate skill manifests.", annotations: { readOnlyHint: true, idempotentHint: true } }, async () => jsonResult(await validateSkills(await loadConfig())));
+  server.registerTool("skill_run", { title: "Run Skill", description: "Run an allowlisted read-only skill handler.", inputSchema: { skillId: z.string().min(1), input: z.record(z.string(), z.unknown()).optional(), mode: z.enum(["validate", "execute"]).default("execute") }, annotations: { readOnlyHint: true, idempotentHint: true } }, async (input) => jsonResult(await runSkill(await loadConfig(), input)));
 
   return server;
 }

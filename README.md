@@ -147,8 +147,10 @@ The `agents` CLI manages registry metadata: `agents list`, `agents show`,
 metadata such as source, category, status, path, and runtime
 (`opencode`, `prompt`, or `external`); the registry does not execute agents.
 
-Skills are currently contracts and documentation for future runtime support;
-they are not an implemented CLI or MCP execution surface.
+Skills are discovered from the packaged `skills/` pack and optional workspace
+`.thoth/skills/` directories. `skills list`, `show` and `validate` inspect
+metadata without executing Markdown. Only read-only `wiki-query` and
+`wiki-lint` handlers execute; other skills return `unsupported`.
 
 ## Repository Map
 
@@ -158,7 +160,7 @@ they are not an implemented CLI or MCP execution surface.
 - `src/wiki/`: Markdown wiki workspace implementation.
 - `schemas/`: portable JSON Schemas.
 - `docs/`: architecture, data model, CLI and MCP documentation.
-- `agents/`: agent definitions and registry; `skills/`: future contracts and documentation.
+- `agents/`: agent definitions and registry; `skills/`: skill packs and runtime contracts.
 - `examples/minimal-workspace/`: compact runnable workspace/wiki example.
 
 ## Verification

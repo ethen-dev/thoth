@@ -59,3 +59,16 @@ base de datos obligatoria.
 Las APIs conceptuales como `capture_knowledge`, `query_knowledge`,
 `list_documents`, `show_document`, `update_document`, `rebuild_index`,
 `run_skill` o `run_agent` son diseños futuros, no nombres de tools actuales.
+# Skill tools
+
+The MCP server exposes `skill_list`, `skill_show`, `skill_validate`, and
+`skill_run`, backed by the same runtime as the CLI. `skill_run` accepts
+`skillId`, `input`, and `mode` (`validate` or `execute`). Only `wiki-query`
+and `wiki-lint` execute; other skills return structured `unsupported` results.
+Markdown bodies and frontmatter commands are never run.
+
+`skill_run` uses the same inputs and outputs as the CLI: `wiki-query` accepts
+`query`, optional `type`, `status`, and `tag`; `wiki-lint` accepts `{}`.
+Query outputs are summaries only and omit full content, raw Markdown, and
+metadata.
+Snippets are whitespace-normalized and limited to 500 characters.

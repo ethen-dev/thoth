@@ -32,6 +32,7 @@ import {
   validWikiRelationTypes,
 } from "../actions/index.js";
 import { loadConfig } from "../core/index.js";
+import { discoverSkills, getSkill, runSkill, validateSkills } from "../skills/index.js";
 
 const thothVersion = "0.6.0";
 const program = new Command();
@@ -687,6 +688,20 @@ agents
       reportError(error);
     }
   });
+
+const skills = program.command("skills").description("Discover and run safe, allowlisted skills");
+skills.command("list").description("List discovered skills").action(async () => {
+  try { const config = await loadConfig(); for (const skill of await discoverSkills(config)) console.log(`${skill.id}\t${skill.version}\t${skill.category}\t${skill.status}\t${skill.path}`); } catch (error) { reportError(error); }
+});
+skills.command("show").argument("<id>", "Skill id").description("Show skill metadata").action(async (id: string) => {
+  try { const skill = await getSkill(await loadConfig(), id); if (!skill) throw new Error(`Skill not found: ${id}`); console.log(JSON.stringify({ ...skill, body: undefined }, null, 2)); } catch (error) { reportError(error); }
+});
+skills.command("validate").description("Validate discovered skill metadata").action(async () => {
+  try { const result = await validateSkills(await loadConfig()); console.log(JSON.stringify(result, null, 2)); if (!result.ok) process.exitCode = 1; } catch (error) { reportError(error); }
+});
+skills.command("run").argument("<id>", "Skill id").requiredOption("--input <json>", "JSON input (query: {query,type?,status?,tag?}; lint: {})").option("--mode <mode>", "validate or execute", "execute").description("Run a read-only skill handler").action(async (id: string, options: { input: string; mode: "validate" | "execute" }) => {
+  try { let input: unknown; try { input = JSON.parse(options.input); } catch { throw new Error("--input must be valid JSON"); } const result = options.mode === "validate" || options.mode === "execute" ? await runSkill(await loadConfig(), { skillId: id, input, mode: options.mode }) : await runSkill(await loadConfig(), { skillId: id, input, mode: options.mode as "execute" }); console.log(JSON.stringify(result, null, 2)); if (!result.ok) process.exitCode = 1; } catch (error) { reportError(error); }
+});
 
 program.parse();
 

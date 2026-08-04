@@ -79,8 +79,16 @@ relaciones `source_for` y `derived_from` de forma idempotente.
 - `thoth agents validate`
 
 Los agentes internos y externos declaran un runtime (`opencode`, `prompt` o
-`external`). Las skills siguen siendo contratos/documentación futura; no
-existe `thoth skill`.
+`external`). Las skills tienen una superficie separada y ejecutable de solo
+lectura:
+
+- `thoth skills list`
+- `thoth skills show <id>`
+- `thoth skills validate`
+- `thoth skills run <id> --input <json> [--mode validate|execute]`
+
+Solo `wiki-query` y `wiki-lint` tienen handlers actualmente. Las demás skills
+se pueden inspeccionar y validar, pero `run` devuelve `unsupported`.
 
 ## Ejemplo mínimo
 
@@ -98,3 +106,28 @@ thoth lint
 Los comandos hipotéticos `thoth agent` (singular) y `thoth mcp`, así como
 flags o comandos no listados aquí, son futuros y no forman parte de la CLI
 actual.
+# Skills
+
+```bash
+thoth skills list
+thoth skills show wiki-query
+thoth skills validate
+thoth skills run wiki-query --input '{"query":"durable context"}'
+thoth skills run wiki-lint --input '{}'
+```
+
+`wiki-query` accepts only `query` plus optional `type`, `status`, and `tag`.
+Its result contains summaries (`id`, `title`, `type`, `status`, `tags`, `path`,
+`snippet`), never full content, raw Markdown, or metadata. `wiki-lint` accepts
+an empty object. Snippets are whitespace-normalized and limited to 500
+characters. Add `--mode validate` to validate without executing.
+
+The runtime never executes Markdown, shell commands, URLs, or providers. Only
+the deterministic, read-only wiki query and lint handlers are available.
+
+## Límites de seguridad
+
+Discovery aplica límites por defecto de profundidad (`4`), archivos (`100`),
+tamaño por archivo (`256 KiB`), frontmatter (`32 KiB`), cuerpo (`224 KiB`) y
+tamaño total (`4 MiB`). Si se supera cualquiera, la operación falla sin
+ejecutar la skill.
