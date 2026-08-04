@@ -12,7 +12,22 @@
     },
     "relation": {
       "type": "string",
-      "minLength": 1
+      "enum": [
+        "belongs_to",
+        "mentions",
+        "depends_on",
+        "continues",
+        "contradicts",
+        "supports",
+        "references",
+        "related_to",
+        "has_note",
+        "has_decision",
+        "has_implementation",
+        "derived_from",
+        "source_for",
+        "supersedes"
+      ]
     }
   }
 }

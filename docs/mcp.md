@@ -95,7 +95,7 @@ Herramientas implementadas inicialmente:
 - `wiki_index`
 - `wiki_lint`
 
-Todas reutilizan las acciones internas compartidas con la CLI.
+Todas reutilizan las acciones internas compartidas con la CLI. `wiki_capture` no acepta `type: source`; las fuentes raw deben entrar por el flujo `source add` de la CLI.
 
 Resources implementados inicialmente:
 

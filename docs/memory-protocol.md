@@ -177,9 +177,14 @@ Relaciones iniciales:
 - `continues`
 - `contradicts`
 - `supports`
-- `derived_from`
-- `supersedes`
+- `references`
 - `related_to`
+- `has_note`
+- `has_decision`
+- `has_implementation`
+- `derived_from`
+- `source_for`
+- `supersedes`
 
 Si una relacion implica contradiccion, reemplazo o cambio de decision, T.H.O.T.H. debe pedir confirmacion antes de marcarla como canonica.
 

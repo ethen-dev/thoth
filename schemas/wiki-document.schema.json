@@ -16,7 +16,22 @@
     },
     "type": {
       "type": "string",
-      "minLength": 1
+      "enum": [
+        "project",
+        "note",
+        "idea",
+        "decision",
+        "implementation",
+        "session",
+        "log",
+        "research",
+        "source",
+        "entity",
+        "character",
+        "chapter",
+        "timeline",
+        "reference"
+      ]
     },
     "status": {
       "type": "string",
@@ -38,7 +53,8 @@
       "uniqueItems": true
     },
     "source": {
-      "type": "string"
+      "type": "string",
+      "description": "Origin label. Source documents produced by source add use raw."
     },
     "related": {
       "type": "array",

@@ -13,6 +13,9 @@ import {
   rebuildWikiIndex,
   searchWikiDocuments,
   updateWikiDocument,
+  validWikiCaptureDocumentTypes,
+  validWikiDocumentTypes,
+  validWikiRelationTypes,
 } from "../actions/index.js";
 import { loadConfig } from "../core/index.js";
 
@@ -103,7 +106,7 @@ export function createThothMcpServer(): McpServer {
       description: "Search Markdown wiki documents with optional metadata filters.",
       inputSchema: {
         query: z.string().min(1),
-        type: z.string().optional(),
+        type: z.enum(validWikiDocumentTypes).optional(),
         status: z.string().optional(),
         tag: z.string().optional(),
       },
@@ -126,7 +129,7 @@ export function createThothMcpServer(): McpServer {
       title: "List Wiki Documents",
       description: "List wiki documents with optional metadata filters.",
       inputSchema: {
-        type: z.string().optional(),
+        type: z.enum(validWikiDocumentTypes).optional(),
         status: z.string().optional(),
         tag: z.string().optional(),
       },
@@ -193,7 +196,7 @@ export function createThothMcpServer(): McpServer {
       inputSchema: {
         content: z.string().min(1),
         title: z.string().optional(),
-        type: z.string().optional(),
+        type: z.enum(validWikiCaptureDocumentTypes).optional(),
         status: z.string().optional(),
         tags: z.array(z.string()).optional(),
       },
@@ -218,7 +221,7 @@ export function createThothMcpServer(): McpServer {
       inputSchema: {
         id: z.string().min(1),
         title: z.string().optional(),
-        type: z.string().optional(),
+        type: z.enum(validWikiDocumentTypes).optional(),
         status: z.string().optional(),
         tags: z.array(z.string()).optional(),
       },
@@ -242,7 +245,7 @@ export function createThothMcpServer(): McpServer {
       inputSchema: {
         sourceId: z.string().min(1),
         targetId: z.string().min(1),
-        relation: z.string().min(1),
+        relation: z.enum(validWikiRelationTypes),
       },
       annotations: {
         readOnlyHint: false,

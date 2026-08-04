@@ -23,7 +23,22 @@
           },
           "type": {
             "type": "string",
-            "minLength": 1
+            "enum": [
+              "project",
+              "note",
+              "idea",
+              "decision",
+              "implementation",
+              "session",
+              "log",
+              "research",
+              "source",
+              "entity",
+              "character",
+              "chapter",
+              "timeline",
+              "reference"
+            ]
           },
           "status": {
             "type": "string",
