@@ -127,6 +127,8 @@ Implemented MCP tools:
 - `wiki_index`
 - `wiki_lint`
 - `wiki_log`
+- `skill_list`, `skill_show`, `skill_validate`, `skill_run`
+- `core_plan`, `core_execute`
 
 Implemented MCP resources:
 
@@ -148,9 +150,23 @@ metadata such as source, category, status, path, and runtime
 (`opencode`, `prompt`, or `external`); the registry does not execute agents.
 
 Skills are discovered from the packaged `skills/` pack and optional workspace
-`.thoth/skills/` directories. `skills list`, `show` and `validate` inspect
-metadata without executing Markdown. Only read-only `wiki-query` and
-`wiki-lint` handlers execute; other skills return `unsupported`.
+`.thoth/skills/` directories. Markdown bodies are documentation only. The LLM
+skills `wiki-ingest`, `wiki-crystallize`, `wiki-integrate` and `wiki-config`
+require an injected `SkillProviderAdapter.complete(request)` and return a
+strictly validated JSON proposal. No provider is discovered or selected by
+default. API/tests can run them safely with `plan`, `dry-run` or confirmed
+`execute` using a trusted adapter; this is not a sandbox. CLI/MCP expose the
+contract but do not select implicit providers. The runtime never executes
+shell, Markdown, or an implicit provider.
+
+```bash
+thoth skills run wiki-ingest --mode plan --input '{"content":"..."}'
+thoth skills run wiki-ingest --mode dry-run --input '{"content":"..."}'
+```
+
+`dry-run` never writes. Mutations without `confirmed=true` return a
+`confirmation_required` proposal. `relate`, `log`, `index`, `source_link` and
+multi-file actions remain `non_atomic_action`.
 
 ## Repository Map
 

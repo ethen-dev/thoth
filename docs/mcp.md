@@ -65,9 +65,10 @@ Las APIs conceptuales como `capture_knowledge`, `query_knowledge`,
 
 The MCP server exposes `skill_list`, `skill_show`, `skill_validate`, and
 `skill_run`, backed by the same runtime as the CLI. `skill_run` accepts
-`skillId`, `input`, and `mode` (`validate` or `execute`). Only `wiki-query`
-and `wiki-lint` execute; other skills return structured `unsupported` results.
-Markdown bodies and frontmatter commands are never run.
+`skillId`, `input`, `mode` (`validate`, `plan`, `dry-run` or `execute`) and
+optional `confirmed`. LLM skills require a provider injected through the API;
+CLI/MCP expose the contract but do not discover one. The adapter is trusted,
+not a sandbox. Shell, Markdown bodies, and implicit providers are never run.
 
 `skill_run` uses the same inputs and outputs as the CLI: `wiki-query` accepts
 `query`, optional `type`, `status`, and `tag`; `wiki-lint` accepts `{}`.

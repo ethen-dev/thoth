@@ -66,7 +66,12 @@ const requiredAgentSnippets = [
   "task:\n    \"thoth-archivist\": allow",
   "bash:\n    \"*\": deny",
   "\"**/.env*\": deny",
-  "\"git push*\": deny",
+  "\"git add*\": allow",
+  "\"git commit*\": allow",
+  "\"git push*\": allow",
+  "\"git push --force*\": deny",
+  "\"git push -f*\": deny",
+  "\"git reset*\": deny",
   "\"sudo*\": deny",
   "webfetch: allow",
   "external_directory: allow",
@@ -137,6 +142,9 @@ const safeBashAllows = new Set([
   "ls*",
   "which*",
   "test*",
+  "git add*",
+  "git commit*",
+  "git push*",
   "git status*",
   "git diff --check*",
   "git diff --stat*",
@@ -170,7 +178,6 @@ const forbiddenBashAllows = [
   "npx*",
   "curl*",
   "wget*",
-  "git push*",
   "git diff*",
   "git diff --no-index*",
   "git reset --hard*",
@@ -179,7 +186,6 @@ const forbiddenBashAllows = [
 ];
 
 const requiredBashDenies = [
-  "git push*",
   "git reset --hard*",
   "git clean*",
   "sudo*",
@@ -288,6 +294,25 @@ function assertPermissionContract(path, content) {
   for (const command of requiredBashDenies) {
     if (bash[command] !== "deny") {
       throw new Error(`${path} must deny: ${command}`);
+    }
+  }
+  if (path.endsWith("thoth-memory.md")) {
+    for (const command of ["git add*", "git commit*", "git push*"]) {
+      if (bash[command] !== "allow") {
+        throw new Error(`${path} must allow authorized Git operation: ${command}`);
+      }
+    }
+    for (const command of ["git push --force*", "git push -f*", "git reset*", "git clean*"]) {
+      if (bash[command] !== "deny") {
+        throw new Error(`${path} must deny destructive Git operation: ${command}`);
+      }
+    }
+    const order = Object.keys(bash);
+    const lastSafeGitAllow = Math.max(...["git add*", "git commit*", "git push*"].map((command) => order.indexOf(command)));
+    for (const command of ["git push --force*", "git push -f*", "git reset*", "git clean*"]) {
+      if (order.indexOf(command) <= lastSafeGitAllow) {
+        throw new Error(`${path} must place destructive Git denial after authorized Git allows: ${command}`);
+      }
     }
   }
   const lastAllow = Math.max(

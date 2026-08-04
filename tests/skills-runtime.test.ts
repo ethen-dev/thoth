@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { discoverSkills, runSkill, validateSkills } from "../src/skills/index.js";
+import { initializeWiki } from "../src/wiki/index.js";
 
 async function config() {
   const workspacePath = await mkdtemp(path.join(os.tmpdir(), "thoth-skills-"));
@@ -95,4 +96,61 @@ describe("skill runtime", () => {
     await expect(discoverSkills(current, { maxTotalBytes: 1 })).rejects.toThrow(/maxTotalBytes/);
     await rm(current.workspacePath, { recursive: true, force: true });
   });
+
+  it("requires an injected provider and validates proposals before use", async () => {
+    const current = await config();
+    expect(await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "execute" })).toMatchObject({ error: { code: "provider_required" } });
+    const invalid = { complete: () => ({ version: 1, summary: "bad", actions: [{ intent: "capture", input: {} }, { intent: "capture", input: {} }] }) };
+    expect(await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "plan" }, invalid)).toMatchObject({ error: { code: "invalid_proposal" } });
+    await rm(current.workspacePath, { recursive: true, force: true });
+  });
+
+  it("keeps dry-run read-only, requires confirmation, and executes one safe action", async () => {
+    const current = await config();
+    await initializeWiki(current);
+    const before = await listFiles(current.resolvedWikiPath);
+    const provider = { complete: (request: { documentation: string }) => {
+      expect(request.documentation).toContain("Markdown");
+      return { version: 1, summary: "capture", actions: [{ intent: "capture", input: { id: "note-safe", title: "Safe", type: "note", content: "$(touch owned)" } }] };
+    } };
+    expect(await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "dry-run", confirmed: true }, provider)).toMatchObject({ ok: true, mode: "dry-run" });
+    expect(await listFiles(current.resolvedWikiPath)).toEqual(before);
+    const proposal = await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "plan" }, provider);
+    const token = (proposal.data as { confirmationToken: string }).confirmationToken;
+    expect(await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "execute" }, provider)).toMatchObject({ ok: true, error: { code: "confirmation_required" } });
+    expect(await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "execute", confirmed: true }, provider)).toMatchObject({ ok: false, error: { code: "confirmation_token_required" } });
+    expect(await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "execute", confirmed: true, confirmationToken: token }, provider)).toMatchObject({ ok: true, status: "executed" });
+    expect(await readFile(path.join(current.resolvedWikiPath, "notes", "note-safe.md"), "utf8")).toContain("$(touch owned)");
+    await rm(current.workspacePath, { recursive: true, force: true });
+  });
+
+  it("rejects non-atomic proposals and preserves wikiPath without overwriting", async () => {
+    const current = await config();
+    await initializeWiki(current);
+    const existing = path.join(current.resolvedWikiPath, "notes", "note-configured.md");
+    await writeFile(existing, "---\nid: note-configured\ntitle: Existing\ntype: note\nstatus: active\ntags: []\n---\nexisting\n", "utf8");
+    const configProvider = { complete: () => ({ version: 1, summary: "config", actions: [{ intent: "capture", input: { id: "note-configured", title: "Configured", type: "note", content: "new" } }] }) };
+    expect(await runSkill(current, { skillId: "wiki-config", input: {}, mode: "execute", confirmed: true }, configProvider)).toMatchObject({ ok: false, status: "unsupported", error: { code: "unsupported" } });
+    const nonAtomic = { complete: () => ({ version: 1, summary: "relate", actions: [{ intent: "relate", input: { sourceId: "a", targetId: "b", relation: "supports" } }] }) };
+    expect(await runSkill(current, { skillId: "wiki-integrate", input: {}, mode: "execute", confirmed: true }, nonAtomic)).toMatchObject({ error: { code: "non_atomic_action" } });
+    await rm(current.workspacePath, { recursive: true, force: true });
+  });
+
+  it("rejects cross-skill actions and changed reviewed proposals", async () => {
+    const current = await config();
+    const cross = { complete: () => ({ version: 1, summary: "cross", actions: [{ intent: "append", input: { id: "note-x", content: "x" } }] }) };
+    expect(await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "plan" }, cross)).toMatchObject({ error: { code: "skill_action_not_allowed" } });
+    let changed = false;
+    const provider = { complete: () => ({ version: 1, summary: changed ? "changed" : "stable", actions: [{ intent: "capture", input: { id: "note-token", title: "Token", type: "note", content: "x" } }] }) };
+    const planned = await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "plan" }, provider);
+    const token = (planned.data as { confirmationToken: string }).confirmationToken;
+    changed = true;
+    expect(await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "execute", confirmed: true, confirmationToken: token }, provider)).toMatchObject({ error: { code: "confirmation_mismatch" } });
+    await rm(current.workspacePath, { recursive: true, force: true });
+  });
 });
+
+async function listFiles(directory: string): Promise<string[]> {
+  const entries = await (await import("node:fs/promises")).readdir(directory, { withFileTypes: true });
+  return entries.map((entry) => entry.name).sort();
+}

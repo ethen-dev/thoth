@@ -67,6 +67,8 @@ describe("MCP server", () => {
       const wikiUpdateTool = tools.tools.find((tool) => tool.name === "wiki_update");
       const wikiCaptureTypeSchema = wikiCaptureTool?.inputSchema.properties?.type as { enum?: string[] } | undefined;
       const wikiUpdateTypeSchema = wikiUpdateTool?.inputSchema.properties?.type as { enum?: string[] } | undefined;
+      const skillRunTool = tools.tools.find((tool) => tool.name === "skill_run");
+      const wikiSearchTool = tools.tools.find((tool) => tool.name === "wiki_search");
 
       expect(tools.tools.map((tool) => tool.name)).toEqual(
         expect.arrayContaining([
@@ -110,6 +112,9 @@ describe("MCP server", () => {
       });
       expect(wikiCaptureTypeSchema?.enum).not.toContain("source");
       expect(wikiUpdateTypeSchema?.enum).toContain("source");
+      expect(skillRunTool?.annotations?.readOnlyHint).toBe(false);
+      expect(skillRunTool?.annotations?.idempotentHint).toBeUndefined();
+      expect(wikiSearchTool?.annotations).toMatchObject({ readOnlyHint: true, idempotentHint: true });
       expect(JSON.parse(lintResult.content[0]?.type === "text" ? lintResult.content[0].text : "{}"))
         .toMatchObject({ documentsChecked: 2, issues: [] });
     } finally {

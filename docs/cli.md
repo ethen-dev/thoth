@@ -91,16 +91,18 @@ relaciones `source_for` y `derived_from` de forma idempotente.
 - `thoth agents validate`
 
 Los agentes internos y externos declaran un runtime (`opencode`, `prompt` o
-`external`). Las skills tienen una superficie separada y ejecutable de solo
-lectura:
+`external`). Las skills tienen una superficie separada; las mutaciones LLM
+solo se ejecutan con propuesta y confirmación explícitas:
 
 - `thoth skills list`
 - `thoth skills show <id>`
 - `thoth skills validate`
-- `thoth skills run <id> --input <json> [--mode validate|execute]`
+- `thoth skills run <id> --input <json> [--mode validate|plan|dry-run|execute] [--confirmed]`
 
-Solo `wiki-query` y `wiki-lint` tienen handlers actualmente. Las demás skills
-se pueden inspeccionar y validar, pero `run` devuelve `unsupported`.
+Las skills LLM requieren un `SkillProviderAdapter` confiable inyectado desde la
+API/tests; CLI no selecciona proveedores implícitos. El runtime nunca ejecuta
+shell ni Markdown. `plan`/`dry-run` devuelven un token de confirmación que debe
+repetirse con `--confirmed --token` para ejecutar.
 
 ## Ejemplo mínimo
 

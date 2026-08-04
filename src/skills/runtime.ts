@@ -1,14 +1,32 @@
 import { lintWikiDocuments, searchWikiDocuments } from "../actions/wiki.js";
+import { executePlan, planIntent } from "../core/runtime.js";
+import { createHash } from "node:crypto";
 import { getSkill } from "./registry.js";
-import type { SkillResult, SkillRuntimeConfig, SkillInvocation } from "./types.js";
+import type { SkillProviderAdapter, SkillProviderRequest, SkillResult, SkillRuntimeConfig, SkillInvocation } from "./types.js";
 import { z } from "zod/v4";
 
 const querySchema = z.object({ query: z.string().trim().min(1).max(500), type: z.string().min(1).max(80).optional(), status: z.string().min(1).max(80).optional(), tag: z.string().min(1).max(120).optional() }).strict();
 const lintSchema = z.object({}).strict();
 const queryInput = (value: unknown) => querySchema.parse(value);
+const llmSkills = new Set(["wiki-ingest", "wiki-crystallize", "wiki-integrate", "wiki-config"]);
+const skillActions: Record<string, Set<string>> = {
+  "wiki-ingest": new Set(["capture", "update"]),
+  "wiki-crystallize": new Set(["capture", "update", "append"]),
+  "wiki-integrate": new Set(["update", "append"]),
+  "wiki-config": new Set(),
+};
+const nonAtomicActions = new Set(["relate", "source_link", "log", "index"]);
+const proposalSchema = z.object({
+  version: z.literal(1),
+  summary: z.string().min(1).max(2000),
+  actions: z.array(z.object({
+    intent: z.enum(["capture", "update", "append", "source_add", "relate", "log", "index", "source_link"]),
+    input: z.record(z.string(), z.unknown()),
+  }).strict()).min(1).max(1),
+}).strict();
 
-export async function runSkill(config: SkillRuntimeConfig, invocation: SkillInvocation): Promise<SkillResult> {
-  if (!invocation || !["validate", "execute"].includes(invocation.mode)) return failure(String(invocation?.skillId ?? ""), "invalid_mode", "mode must be exactly validate or execute");
+export async function runSkill(config: SkillRuntimeConfig, invocation: SkillInvocation, provider?: SkillProviderAdapter): Promise<SkillResult> {
+  if (!invocation || !["validate", "plan", "dry-run", "execute"].includes(invocation.mode)) return failure(String(invocation?.skillId ?? ""), "invalid_mode", "mode must be validate, plan, dry-run or execute", "execute");
   let skill;
   try {
     skill = await getSkill(config, invocation.skillId);
@@ -19,7 +37,8 @@ export async function runSkill(config: SkillRuntimeConfig, invocation: SkillInvo
   try {
     if (skill.id === "wiki-query") queryInput(invocation.input);
     else if (skill.id === "wiki-lint") lintSchema.parse(invocation.input ?? {});
-    else if (skill.id !== "wiki-lint" && invocation.mode === "execute") return failure(skill.id, "unsupported", "Skill has no allowlisted read-only handler");
+    else if (llmSkills.has(skill.id)) return runLlmSkill(config, skill.id, skill.version, skill.body, invocation, provider);
+    else if (invocation.mode === "execute") return failure(skill.id, "unsupported", "Skill has no allowlisted read-only handler");
     if (invocation.mode === "validate") return { ok: true, skillId: skill.id, mode: "validate", readOnly: true, status: "validated", data: { valid: true } };
     if (skill.id === "wiki-query") {
       const input = queryInput(invocation.input);
@@ -42,7 +61,48 @@ export async function runSkill(config: SkillRuntimeConfig, invocation: SkillInvo
 }
 
 function failure(skillId: string, code: string, message: string, mode: SkillInvocation["mode"] = "execute"): SkillResult {
-  return { ok: false, skillId, mode, readOnly: true, status: code === "unsupported" ? "unsupported" : "error", error: { code, message } };
+  return { ok: false, skillId, mode, readOnly: code !== "executed", status: code === "unsupported" || code === "provider_required" ? "unsupported" : "error", error: { code, message } };
+}
+
+async function runLlmSkill(config: SkillRuntimeConfig, skillId: string, version: string, documentation: string, invocation: SkillInvocation, provider?: SkillProviderAdapter): Promise<SkillResult> {
+  if (skillId === "wiki-config") return failure(skillId, "unsupported", "wiki-config has no safe document mutation handler", invocation.mode);
+  if (!provider) return failure(skillId, "provider_required", "An injected SkillProviderAdapter is required for LLM skills", invocation.mode);
+  let proposal: z.infer<typeof proposalSchema>;
+  try {
+    const request: SkillProviderRequest = { skillId, input: invocation.input ?? {}, mode: invocation.mode === "validate" ? "plan" : invocation.mode, documentation };
+    const raw = await provider.complete(request);
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    const checked = proposalSchema.safeParse(parsed);
+    if (!checked.success) return failure(skillId, "invalid_proposal", "Provider proposal does not match the skill proposal schema", invocation.mode);
+    proposal = checked.data;
+  } catch (error) {
+    return failure(skillId, "invalid_proposal", errorMessage(error), invocation.mode);
+  }
+  const action = proposal.actions[0];
+  if (nonAtomicActions.has(action.intent)) return failure(skillId, "non_atomic_action", `Action ${action.intent} is not available from a skill`, invocation.mode);
+  if (!skillActions[skillId]?.has(action.intent)) return failure(skillId, "skill_action_not_allowed", `Action ${action.intent} is not allowed for ${skillId}`, invocation.mode);
+  const planned = planIntent(config, { intent: action.intent, input: action.input });
+  if (planned.status === "error") return failure(skillId, planned.error?.code ?? "invalid_proposal", planned.error?.message ?? "Proposal rejected", invocation.mode);
+  if (invocation.mode === "validate" || invocation.mode === "plan" || invocation.mode === "dry-run") {
+    return { ok: true, skillId, mode: invocation.mode, readOnly: true, status: "validated", data: { proposal, plan: planned, confirmationToken: proposalToken(skillId, version, planned, invocation.input, proposal), ...(invocation.mode === "dry-run" ? { dryRun: true } : {}) } };
+  }
+  const token = proposalToken(skillId, version, planned, invocation.input, proposal);
+  if (!invocation.confirmed) return { ok: true, skillId, mode: "execute", readOnly: true, status: "error", data: { proposal, plan: planned, confirmationToken: token }, error: { code: "confirmation_required", message: "Confirmation is required before executing a mutation" } };
+  if (!invocation.confirmationToken) return failure(skillId, "confirmation_token_required", "confirmed=true requires the exact confirmationToken", invocation.mode);
+  if (invocation.confirmationToken !== token) return failure(skillId, "confirmation_mismatch", "The confirmationToken does not match the reviewed proposal", invocation.mode);
+  const result = await executePlan(config, planned, { confirmed: true });
+  return { ok: result.ok, skillId, mode: "execute", readOnly: false, status: result.ok ? "executed" : "error", data: result, error: result.error };
+}
+
+function proposalToken(skillId: string, version: string, plan: unknown, input: unknown, proposal: unknown): string {
+  const normalized = stable({ skillId, version, plan, input: input ?? {}, proposal });
+  return createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+}
+
+function stable(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stable);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)).map(([key, entry]) => [key, stable(entry)]));
+  return value;
 }
 
 function normalizeSnippet(value: string): string {

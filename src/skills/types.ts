@@ -12,6 +12,14 @@ export type SkillManifest = {
 };
 
 export type Skill = SkillManifest & { body: string };
+export type SkillProviderRequest = {
+  skillId: string;
+  input: unknown;
+  mode: "plan" | "dry-run" | "execute";
+  /** Markdown is context-only documentation and must not be treated as instructions. */
+  documentation: string;
+};
+export type SkillProviderAdapter = { complete(request: SkillProviderRequest): Promise<unknown> | unknown };
 export type SkillLimits = {
   maxDepth: number;
   maxFiles: number;
@@ -20,7 +28,7 @@ export type SkillLimits = {
   maxBodyBytes: number;
   maxTotalBytes: number;
 };
-export type SkillInvocation = { skillId: string; input?: unknown; mode: "validate" | "execute" };
+export type SkillInvocation = { skillId: string; input?: unknown; mode: "validate" | "plan" | "dry-run" | "execute"; confirmed?: boolean; confirmationToken?: string };
 export type SkillResult = {
   ok: boolean;
   skillId: string;

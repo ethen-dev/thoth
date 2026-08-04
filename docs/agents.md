@@ -98,7 +98,11 @@ Este perfil no autoriza ejecución arbitraria ni constituye un sandbox completo:
 
 Las denegaciones de lectura y edición de secretos usan patrones (`.aws`, `.npmrc`, credenciales, tokens, claves y formatos de certificados, entre otros) como defensa preventiva; no sustituyen un sandbox completo ni garantizan detectar todos los secretos.
 
-También permanecen bloqueadas o en `ask` las operaciones destructivas, secretos, `git push` no solicitado, `git reset`/`git clean`, `sudo`, red, instalaciones, `npm exec`, npx remoto, `git diff` amplio y comandos de desarrollo no whitelisted. `thoth *` se reserva para operaciones de wiki solicitadas por el orquestador.
+También permanecen bloqueadas o en `ask` las operaciones destructivas generales, secretos, `sudo`, red, instalaciones, `npm exec`, npx remoto, `git diff` amplio y comandos de desarrollo no whitelisted.
+
+El agente primario puede ejecutar `git add*`, `git commit*` y `git push*` únicamente tras una petición explícita del usuario o una instrucción de publicación inequívoca, nunca por iniciativa propia, y mantiene un commit por tarea. Force push (`git push --force*`/`git push -f*`), `git reset*` y `git clean*` siguen bloqueados. Los demás agentes no reciben permisos Git mutantes; el orquestador primario centraliza la publicación y `thoth *` se reserva para operaciones de wiki solicitadas por él.
+
+Estas reglas expresan una política de autorización del agente, no una garantía completa del shell, del proveedor Git ni del repositorio remoto; las credenciales, hooks y permisos externos siguen fuera del alcance de este pack.
 
 `webfetch` y `websearch` son permisos separados de `bash` y pueden seguir permitidos según el agente. La autonomía sin confirmación descrita aquí solo cubre la whitelist local de `bash`; el acceso web conserva sus propias reglas y límites.
 
