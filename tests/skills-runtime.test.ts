@@ -51,6 +51,7 @@ describe("skill runtime", () => {
     const current = await config();
     expect(await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "execute" })).toMatchObject({ ok: false, status: "unsupported" });
     expect(await runSkill(current, { skillId: "wiki-query", input: {}, mode: "execute" })).toMatchObject({ ok: false, status: "error", error: { code: "invalid_input" } });
+    expect(await runSkill(current, { skillId: "wiki-query", input: { query: "x".repeat(501) }, mode: "execute" })).toMatchObject({ ok: false, error: { code: "invalid_input" } });
     expect(await runSkill(current, { skillId: "wiki-query", input: { query: "query" }, mode: "validate" })).toMatchObject({ ok: true, mode: "validate", status: "validated" });
     expect(await runSkill(current, { skillId: "wiki-query", input: {}, mode: "invalid" as "execute" })).toMatchObject({ ok: false, mode: "execute", error: { code: "invalid_mode" } });
     await rm(current.workspacePath, { recursive: true, force: true });

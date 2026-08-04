@@ -1096,6 +1096,33 @@ durable context
     expect(tagResults).toHaveLength(1);
     expect(noResults).toHaveLength(0);
     expect(results[0]?.snippet).toContain("durable context");
+    expect(results[0]).not.toHaveProperty("content");
+    expect(results[0]).not.toHaveProperty("raw");
+    expect(results[0]).not.toHaveProperty("metadata");
+    const longContent = `${"x".repeat(700)} durable`;
+    await writeFile(path.join(config.resolvedWikiPath, "notes", "long-search.md"), `---\nid: long-search\ntitle: Long Search\ntype: note\nstatus: active\ntags: []\n---\n${longContent}\n`, "utf8");
+    const longResult = await searchWikiDocuments(config, "durable");
+    expect(longResult.find((result) => result.id === "long-search")?.snippet.length).toBeLessThanOrEqual(500);
+    await expect(searchWikiDocuments(config, "x".repeat(501))).rejects.toThrow("at most 500");
+    await expect(searchWikiDocuments(config, "durable", { limit: 21 })).rejects.toThrow("between 1 and 20");
+  });
+
+  it("validates invalid queries before checking a missing wiki and limits deterministically", async () => {
+    const missingWorkspace = await createWorkspace({ wikiPath: "missing-wiki" });
+    const missingConfig = await loadConfig(missingWorkspace);
+    await expect(searchWikiDocuments(missingConfig, "")).rejects.toThrow("must not be empty");
+    await expect(searchWikiDocuments(missingConfig, "x".repeat(501))).rejects.toThrow("at most 500");
+    await expect(searchWikiDocuments(missingConfig, "valid", { limit: 21 })).rejects.toThrow("between 1 and 20");
+    await expect(searchWikiDocuments(missingConfig, "valid")).resolves.toEqual([]);
+
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    for (const id of ["z-result", "a-result", "m-result"]) {
+      await writeFile(path.join(config.resolvedWikiPath, "notes", `${id}.md`), `---\nid: ${id}\ntitle: ${id}\ntype: note\nstatus: active\ntags: []\n---\nshared query\n`, "utf8");
+    }
+    const results = await searchWikiDocuments(config, "shared query", { limit: 2 });
+    expect(results.map((result) => result.path)).toEqual(["notes/a-result.md", "notes/m-result.md"]);
   });
 
   it("rebuilds derived indexes and reports broken relations", async () => {
