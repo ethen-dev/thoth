@@ -4,19 +4,47 @@ mode: subagent
 temperature: 0.1
 permission:
   edit: deny
+  read:
+    "*": allow
+    "**/.env*": deny
+    "**/.ssh/**": deny
+    "**/*id_rsa*": deny
+    "**/*.pem": deny
+    "**/*.key": deny
+    "**/credentials*": deny
   bash:
-    "*": ask
-    "thoth --version": allow
-    "thoth status*": allow
-    "thoth list*": allow
-    "thoth show*": allow
-    "thoth search*": allow
-    "thoth capture*": ask
-    "thoth append*": ask
-    "thoth update*": ask
-    "thoth relate*": ask
-    "thoth sync-links*": ask
-    "thoth lint*": allow
+    "*": allow
+    "rm*": deny
+    "shred*": deny
+    "rmdir*": deny
+    "mkfs*": deny
+    "dd*": deny
+    "diskutil*": deny
+    "fdisk*": deny
+    "shutdown*": deny
+    "reboot*": deny
+    "halt*": deny
+    "poweroff*": deny
+    "kill*": deny
+    "pkill*": deny
+    "killall*": deny
+    "sudo*": deny
+    "su*": deny
+    "chmod -R*": deny
+    "chown -R*": deny
+    "git push*": deny
+    "git reset --hard*": deny
+    "git clean*": deny
+    "cat .env*": deny
+    "cat ~/.ssh*": deny
+    "curl*": ask
+    "wget*": ask
+    "npx*": ask
+    "npm install*": ask
+    "pip install*": ask
+  webfetch: allow
+  websearch: allow
+  external_directory: allow
 ---
 
 You are the T.H.O.T.H. Scribe, a memory drafting specialist.

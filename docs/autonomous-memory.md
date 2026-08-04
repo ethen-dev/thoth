@@ -67,7 +67,7 @@ When a user asks T.H.O.T.H. to study and memorize an existing project, the OpenC
 - `thoth-scribe` writes approved memory using `thoth` commands.
 - `thoth-critic` reviews privacy, ambiguity, duplication, and structure.
 
-Safe read-only inspection should not require repeated confirmation. Memory writes and relation changes remain confirmed operations.
+The OpenCode agents grant most commands automatically. Safe operations run without confirmation, including memory writes and relation changes via the `thoth` CLI. Permission is only restricted for dangerous operations: destructive or system commands, access to secrets and private keys, and remote `git push`. Network or install commands such as `curl`, `wget`, `npx`, `npm install`, and `pip install` still ask before running.
 
 Every memory write should pass through `thoth-scribe` or its writing rules, including small decisions. When source, target, and relation type are clear, memory writes should also create explicit frontmatter relations with `thoth relate`. Run `thoth sync-links` before `thoth index --human` so frontmatter relations are mirrored as Markdown links. Every project intake that writes memory should also create or append a session log in `logs/`, then run `thoth sync-links` and `thoth index --human`. The final receipt should state whether relations, link sync, logging, and indexing happened.
 

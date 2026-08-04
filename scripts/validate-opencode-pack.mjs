@@ -60,14 +60,14 @@ const requiredAgentSnippets = [
   "thoth sync-links",
   "generated views",
   "Markdown links",
-  "pwd",
-  "ls*",
-  "rg*",
   "mode: primary",
   "edit: deny",
-  "thoth search*",
-  "thoth capture*",
-  "thoth doctor*",
+  "\"*\": allow",
+  "\"**/.env*\": deny",
+  "\"git push*\": deny",
+  "\"sudo*\": deny",
+  "webfetch: allow",
+  "external_directory: allow",
   "You are T.H.O.T.H.",
 ];
 
@@ -105,7 +105,10 @@ const requiredReadmeSnippets = [
 
 const requiredSubagentSnippets = [
   "mode: subagent",
-  "\"*\": ask",
+  "\"*\": allow",
+  "\"**/.env*\": deny",
+  "\"git push*\": deny",
+  "\"sudo*\": deny",
 ];
 
 const requiredAutonomousMemoryDocSnippets = [

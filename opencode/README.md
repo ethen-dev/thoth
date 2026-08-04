@@ -103,7 +103,7 @@ Connect the garden irrigation note with the summer planting plan.
 Run a health check on my memory wiki.
 ```
 
-The agent will use the `thoth` command line tool to search, save, update, relate, and diagnose memory. It should ask before storing sensitive information or making ambiguous changes.
+The agent will use the `thoth` command line tool to search, save, update, relate, and diagnose memory. Memory writes via the `thoth` CLI are auto-granted; the agent only pauses for content-level confirmation before storing sensitive, ambiguous, or high-impact information.
 
 ## Autonomous Memory
 
@@ -138,7 +138,7 @@ The primary agent should orchestrate the specialist agents:
 - `thoth-scribe` writes approved memory with `thoth` commands
 - `thoth-critic` reviews privacy, duplication, ambiguity, and structure
 
-Read-only project inspection is allowed to reduce permission prompts. Memory writes still ask for confirmation.
+The OpenCode agents run most operations without permission prompts. Memory writes via the `thoth` CLI are auto-granted. Dangerous operations are denied: destructive or system commands, access to secrets and private keys, and remote `git push`. Network or install commands such as `curl`, `wget`, `npx`, `npm install`, and `pip install` still ask before running.
 
 All memory writes should pass through `thoth-scribe` or its writing rules, even for small decisions. The agent should create explicit relations with `thoth relate` when source, target, and relation type are clear. The index is only a generated navigation view; relationships should live in document frontmatter and be mirrored as Markdown links in `## Relations` with `thoth sync-links`. After a project study session that writes memory, the agent should also create or update a session log and run `thoth sync-links` plus `thoth index --human`. Its final response should mention saved documents, explicit relations, link sync status, log status, derived index status, human index status, and unresolved questions.
 
