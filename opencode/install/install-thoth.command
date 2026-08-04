@@ -24,6 +24,24 @@ run() {
   fi
 }
 
+configure_npm_global_install() {
+  local npm_root npm_root_parent user_prefix
+  npm_root="$(npm root -g 2>/dev/null || true)"
+
+  if [[ -n "$npm_root" ]]; then
+    npm_root_parent="${npm_root:h}"
+    if [[ -w "$npm_root" || ( ! -e "$npm_root" && -w "$npm_root_parent" ) ]]; then
+      return
+    fi
+  fi
+
+  user_prefix="${NPM_CONFIG_PREFIX:-$HOME/.npm-global}"
+  export NPM_CONFIG_PREFIX="$user_prefix"
+  export PATH="$user_prefix/bin:$PATH"
+  mkdir -p "$user_prefix"
+  say "Using user npm global prefix: $user_prefix"
+}
+
 say "T.H.O.T.H. macOS installer"
 say "Workspace: $WORKSPACE_DIR"
 say "Wiki: $WIKI_DIR"
@@ -45,6 +63,7 @@ if [[ "$DRY_RUN" == "yes" ]]; then
   say "DRY RUN: would install T.H.O.T.H. globally from $REPO_DIR"
 else
   (cd "$REPO_DIR" && npm install && npm run build)
+  configure_npm_global_install
   npm install -g "$REPO_DIR"
 fi
 
@@ -66,3 +85,6 @@ fi
 
 say "T.H.O.T.H. installation finished."
 say "OpenCode can use this workspace: $WORKSPACE_DIR"
+if [[ "${NPM_CONFIG_PREFIX:-}" == "$HOME/.npm-global" ]]; then
+  say "If a new Terminal cannot find thoth, add this to your shell profile: export PATH=\"$HOME/.npm-global/bin:\$PATH\""
+fi
