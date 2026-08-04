@@ -50,6 +50,11 @@ describe("MCP server", () => {
         },
       });
       const lintResult = await client.callTool({ name: "wiki_lint", arguments: {} });
+      const skillListResult = await client.callTool({ name: "skill_list", arguments: {} });
+      const skillShowResult = await client.callTool({ name: "skill_show", arguments: { id: "wiki-query" } });
+      const skillValidateResult = await client.callTool({ name: "skill_validate", arguments: {} });
+      const skillRunResult = await client.callTool({ name: "skill_run", arguments: { skillId: "wiki-query", input: { query: "not-present" }, mode: "execute" } });
+      const skillErrorResult = await client.callTool({ name: "skill_run", arguments: { skillId: "wiki-query", input: {}, mode: "execute" } });
       const wikiCaptureTool = tools.tools.find((tool) => tool.name === "wiki_capture");
       const wikiUpdateTool = tools.tools.find((tool) => tool.name === "wiki_update");
       const wikiCaptureTypeSchema = wikiCaptureTool?.inputSchema.properties?.type as { enum?: string[] } | undefined;
@@ -66,9 +71,18 @@ describe("MCP server", () => {
           "wiki_index",
           "wiki_lint",
           "wiki_log",
+          "skill_list",
+          "skill_show",
+          "skill_validate",
+          "skill_run",
         ]),
       );
       expect(lintResult.content[0]).toMatchObject({ type: "text" });
+      expect(JSON.parse(skillListResult.content[0]?.type === "text" ? skillListResult.content[0].text : "{}").skills).toEqual(expect.arrayContaining([expect.objectContaining({ id: "wiki-query", path: "skills/llm-wiki/wiki-query.md" })]));
+      expect(JSON.parse(skillShowResult.content[0]?.type === "text" ? skillShowResult.content[0].text : "{}")).toMatchObject({ id: "wiki-query", category: "llm-wiki" });
+      expect(JSON.parse(skillValidateResult.content[0]?.type === "text" ? skillValidateResult.content[0].text : "{}")).toMatchObject({ ok: true });
+      expect(JSON.parse(skillRunResult.content[0]?.type === "text" ? skillRunResult.content[0].text : "{}")).toMatchObject({ ok: true, skillId: "wiki-query", mode: "execute" });
+      expect(JSON.parse(skillErrorResult.content[0]?.type === "text" ? skillErrorResult.content[0].text : "{}")).toMatchObject({ ok: false, error: { code: "invalid_input" } });
       expect(resourceTemplates.resourceTemplates.map((template) => template.uriTemplate))
         .toContain("thoth://document/{id}");
       expect(indexResource.contents[0]).toMatchObject({ mimeType: "text/markdown" });

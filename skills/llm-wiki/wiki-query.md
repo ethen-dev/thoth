@@ -9,41 +9,40 @@ primary_agent: librarian
 
 # wiki-query
 
-Consulta la LLM Wiki usando recuperacion progresiva.
+Busca texto en la LLM Wiki de forma determinista y read-only. No ejecuta el
+cuerpo de esta skill ni ningún comando, URL o proveedor externo.
 
-## Cuando Usarla
+## Input
 
-- el usuario pregunta por conocimiento previo
-- hace falta recuperar contexto antes de actuar
-- se debe evitar duplicar informacion
-- una sesion nueva necesita bootstrap
-- despues de compactacion o perdida de contexto
+La invocación requiere un objeto con:
 
-## Entradas
+- `query`: string no vacío, máximo 500 caracteres.
+- `type`: string opcional.
+- `status`: string opcional.
+- `tag`: string opcional.
 
-- query
-- proyecto o dominio activo
-- filtros opcionales: tipo, tags, status, topic key
-- limite de resultados
-- modo: `summary`, `full`, `metadata`
+No se aceptan otros campos.
 
-## Salidas
+## Modos
 
-- documentos candidatos
-- resumenes
-- IDs y rutas
-- relaciones relevantes
-- recomendacion de siguiente lectura
+- `validate`: valida metadata e input sin consultar la wiki.
+- `execute`: ejecuta la búsqueda read-only.
 
-## Reglas
+## Output
 
-- No cargar documentos completos por defecto.
-- Priorizar documentos activos y del proyecto actual.
-- Devolver referencias trazables.
-- Advertir si el resultado es ambiguo o insuficiente.
+`execute` devuelve `{ results }`. Cada resultado contiene únicamente:
 
-## Handoff
+```json
+{
+  "id": "document-id",
+  "title": "Document title",
+  "type": "note",
+  "status": "active",
+  "tags": ["tag"],
+  "path": "notes/document.md",
+  "snippet": "Texto normalizado, máximo 500 caracteres."
+}
+```
 
-- `librarian` ejecuta la consulta.
-- `thoth-core` decide si usar el resultado para responder o delegar.
-- `critic` revisa si hay contradicciones.
+No devuelve `content`, `raw`, `metadata`, relaciones, proyectos, topic keys,
+límites de resultados ni modos `summary`, `full` o `metadata`.
