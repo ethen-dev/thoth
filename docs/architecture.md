@@ -62,6 +62,14 @@ Pueden encargarse de tareas como resumir, redactar, clasificar, revisar coherenc
 
 Cada agente debe tener una funcion clara y un contrato de entrada/salida definido.
 
+El primer slice ejecutable mantiene separado el registry de metadata y el
+runtime. `executeAgent` solo acepta IDs internos allowlisted con runtime
+`prompt`; los agentes `opencode` y `external` siguen siendo metadata-only. Las
+operaciones `validate`/`plan` no llaman adapters. `execute` recibe un
+`AgentAdapter` confiable inyectado, timeout y límites, y valida un output JSON
+estructurado. No hay provider por defecto, Markdown, shell, subprocess, red ni
+escrituras en esta ruta; el adapter no está sandboxed.
+
 ### Skills
 
 Las skills son capacidades reutilizables que pueden ser invocadas por T.H.O.T.H. o por agentes especializados.

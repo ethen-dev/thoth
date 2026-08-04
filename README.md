@@ -147,7 +147,15 @@ implemented prompt is `capture_memory`; tools and resources are not prompts.
 The `agents` CLI manages registry metadata: `agents list`, `agents show`,
 `agents register`, `agents unregister`, and `agents validate`. Entries declare
 metadata such as source, category, status, path, and runtime
-(`opencode`, `prompt`, or `external`); the registry does not execute agents.
+(`opencode`, `prompt`, or `external`); the registry remains metadata-only for
+OpenCode/external agents and does not select providers.
+
+The API runtime exports `executeAgent` with textual, bounded input and
+`validate`/`plan`/`execute` modes. Only explicitly allowlisted internal
+`prompt` agents may execute. `execute` requires a trusted injected
+`AgentAdapter`, a timeout, bounded structured JSON output, and is not sandboxed;
+the runtime performs no Markdown interpretation, shell/subprocess, network, or
+write operation. There is no default provider and no `agents run` CLI command.
 
 Skills are discovered from the packaged `skills/` pack and optional workspace
 `.thoth/skills/` directories. Markdown bodies are documentation only. The LLM

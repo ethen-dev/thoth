@@ -127,6 +127,20 @@ flowchart TD
   Wiki --> Derived[Indices derivados]
 ```
 
+## Runtime del primer slice
+
+`src/agents/runtime.ts` expone `AgentExecutionRequest`, `AgentExecutionResult` y
+`AgentAdapter`. Solo resuelve IDs presentes en el registry, de `source: internal`,
+con IDs de una allowlist explícita y `runtime: prompt`. `opencode` y `external`
+se mantienen como metadata del registry y se rechazan para ejecución.
+
+`validate` y `plan` son read-only y no invocan adapters. `execute` requiere un
+adapter inyectado, un `timeoutMs` obligatorio y límites de entrada/salida; el
+output debe ser un objeto JSON estructurado. El adapter confiable inyectado por
+la API o tests no está sandboxed: este slice no interpreta Markdown, ejecuta
+shell/subprocesos, usa red ni escribe. No existe provider por defecto ni CLI
+`agents run`.
+
 ## Uso Futuro
 
 T.H.O.T.H. deberia poder descubrir agentes leyendo la carpeta `agents/`.

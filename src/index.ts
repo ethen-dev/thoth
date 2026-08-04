@@ -4,3 +4,4 @@ export * from "./mcp/server.js";
 export * from "./storage/index.js";
 export * from "./wiki/index.js";
 export * from "./skills/index.js";
+export * from "./agents/index.js";
