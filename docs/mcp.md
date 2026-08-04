@@ -7,7 +7,7 @@ configurada en `thoth.config.json`. La superficie real es la siguiente.
 
 | Tool | Parámetros |
 | --- | --- |
-| `wiki_search` | `query`; opcionales `type`, `status`, `tag` |
+| `wiki_search` | `query`; opcionales `type`, `status`, `tag`, `limit` (1-20, por defecto 20) |
 | `wiki_list` | opcionales `type`, `status`, `tag` |
 | `wiki_show` | `id`; `mode`: `content`, `metadata` o `raw` |
 | `wiki_capture` | `content`; opcionales `title`, `type`, `status`, `tags` (array), `projectId` |
@@ -48,7 +48,9 @@ Prompt implementado:
 - `capture_memory`, con argumentos `content` e `intent` opcional.
 
 Resources proporcionan Markdown; el prompt guía el flujo de captura. No son
-tools ni agentes ejecutables.
+tools ni agentes ejecutables. `wiki_show` y los resources pueden devolver
+intencionalmente `content`, `raw` o `metadata` bajo demanda; la restricción de
+resúmenes aplica a `wiki_search`, `wiki-query` y la query del Core.
 
 ## Configuración
 
@@ -72,3 +74,21 @@ Markdown bodies and frontmatter commands are never run.
 Query outputs are summaries only and omit full content, raw Markdown, and
 metadata.
 Snippets are whitespace-normalized and limited to 500 characters.
+# Core estructurado
+
+Además de las herramientas MCP existentes, el servidor expone `core_plan` y
+`core_execute`. Ambas reutilizan el runtime del Core y aceptan los contratos
+JSON `IntentRequest` y `ThothPlan`; los planes malformados producen un resultado
+estructurado `invalid_input` y no una excepción de despacho. Las escrituras
+requieren `confirmed: true`. `query` solo devuelve búsqueda resumida; `show` es
+un intent explícito que requiere un id seleccionado.
+
+Esta es la ruta estructurada provider-agnostic: los writes requieren
+confirmación y las acciones no atómicas se rechazan. Las tools MCP legacy
+siguen existiendo por compatibilidad y aún no están migradas al Core; el Core
+no constituye una garantía global sobre todas las tools.
+
+`wiki_search` es una superficie legacy independiente del Core: devuelve
+resultados resumidos, acepta `limit` opcional y aplica máximo 20 (por defecto
+20). El Core rechaza acciones multiarchivo sin transacción.
+Las herramientas MCP antiguas siguen existiendo.

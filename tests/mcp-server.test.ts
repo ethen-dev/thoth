@@ -55,6 +55,14 @@ describe("MCP server", () => {
       const skillValidateResult = await client.callTool({ name: "skill_validate", arguments: {} });
       const skillRunResult = await client.callTool({ name: "skill_run", arguments: { skillId: "wiki-query", input: { query: "not-present" }, mode: "execute" } });
       const skillErrorResult = await client.callTool({ name: "skill_run", arguments: { skillId: "wiki-query", input: {}, mode: "execute" } });
+      const corePlanResult = await client.callTool({ name: "core_plan", arguments: { intent: "query", input: { query: "not-present" } } });
+      const coreExecuteResult = await client.callTool({ name: "core_execute", arguments: { plan: JSON.parse(corePlanResult.content[0]?.type === "text" ? corePlanResult.content[0].text : "{}") } });
+      const coreWritePlan = await client.callTool({ name: "core_plan", arguments: { intent: "capture", input: { content: "must confirm" } } });
+      const coreWriteResult = await client.callTool({ name: "core_execute", arguments: { plan: JSON.parse(coreWritePlan.content[0]?.type === "text" ? coreWritePlan.content[0].text : "{}") } });
+      const coreMalformedResult = await client.callTool({ name: "core_execute", arguments: { plan: [] } });
+      const coreCrossedResult = await client.callTool({ name: "core_plan", arguments: { intent: "query", action: "wiki.show", input: { id: "wiki-index" } } });
+      const legacySearchResult = await client.callTool({ name: "wiki_search", arguments: { query: "not-present", limit: 1 } });
+      const longSearchResult = await client.callTool({ name: "wiki_search", arguments: { query: "x".repeat(501) } });
       const wikiCaptureTool = tools.tools.find((tool) => tool.name === "wiki_capture");
       const wikiUpdateTool = tools.tools.find((tool) => tool.name === "wiki_update");
       const wikiCaptureTypeSchema = wikiCaptureTool?.inputSchema.properties?.type as { enum?: string[] } | undefined;
@@ -83,6 +91,14 @@ describe("MCP server", () => {
       expect(JSON.parse(skillValidateResult.content[0]?.type === "text" ? skillValidateResult.content[0].text : "{}")).toMatchObject({ ok: true });
       expect(JSON.parse(skillRunResult.content[0]?.type === "text" ? skillRunResult.content[0].text : "{}")).toMatchObject({ ok: true, skillId: "wiki-query", mode: "execute" });
       expect(JSON.parse(skillErrorResult.content[0]?.type === "text" ? skillErrorResult.content[0].text : "{}")).toMatchObject({ ok: false, error: { code: "invalid_input" } });
+      expect(JSON.parse(corePlanResult.content[0]?.type === "text" ? corePlanResult.content[0].text : "{}")).toMatchObject({ status: "planned", steps: [{ action: "skill.wiki-query", write: false }] });
+      expect(JSON.parse(coreExecuteResult.content[0]?.type === "text" ? coreExecuteResult.content[0].text : "{}")).toMatchObject({ ok: true, status: "executed" });
+      expect(JSON.parse(coreWriteResult.content[0]?.type === "text" ? coreWriteResult.content[0].text : "{}")).toMatchObject({ status: "proposal", error: { code: "confirmation_required" } });
+      expect(JSON.parse(coreMalformedResult.content[0]?.type === "text" ? coreMalformedResult.content[0].text : "{}")).toMatchObject({ ok: false, error: { code: "invalid_input" } });
+      expect(JSON.parse(coreCrossedResult.content[0]?.type === "text" ? coreCrossedResult.content[0].text : "{}")).toMatchObject({ status: "error", error: { code: "not_allowlisted" } });
+      const legacySearch = JSON.parse(legacySearchResult.content[0]?.type === "text" ? legacySearchResult.content[0].text : "{}");
+      expect(legacySearch.results).toEqual([]);
+      expect(longSearchResult.isError).toBe(true);
       expect(resourceTemplates.resourceTemplates.map((template) => template.uriTemplate))
         .toContain("thoth://document/{id}");
       expect(indexResource.contents[0]).toMatchObject({ mimeType: "text/markdown" });

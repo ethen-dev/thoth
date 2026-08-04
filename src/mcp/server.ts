@@ -19,7 +19,7 @@ import {
   validWikiDocumentTypes,
   validWikiRelationTypes,
 } from "../actions/index.js";
-import { loadConfig } from "../core/index.js";
+import { executePlan, loadConfig, planIntent } from "../core/index.js";
 import { discoverSkills, getSkill, runSkill, validateSkills } from "../skills/index.js";
 
 export function createThothMcpServer(): McpServer {
@@ -108,10 +108,11 @@ export function createThothMcpServer(): McpServer {
       title: "Search Wiki",
       description: "Search Markdown wiki documents with optional metadata filters.",
       inputSchema: {
-        query: z.string().min(1),
+        query: z.string().trim().min(1).max(500),
         type: z.enum(validWikiDocumentTypes).optional(),
         status: z.string().optional(),
         tag: z.string().optional(),
+        limit: z.number().int().min(1).max(20).default(20),
       },
     },
     async (input) => {
@@ -120,6 +121,7 @@ export function createThothMcpServer(): McpServer {
         type: input.type,
         status: input.status,
         tag: input.tag,
+        limit: input.limit,
       });
 
       return jsonResult({ results });
@@ -329,6 +331,8 @@ export function createThothMcpServer(): McpServer {
   );
 
   server.registerTool("skill_list", { title: "List Skills", description: "List discovered skill metadata.", annotations: { readOnlyHint: true, idempotentHint: true } }, async () => jsonResult({ skills: (await discoverSkills(await loadConfig())).map(({ body: _body, ...manifest }) => manifest) }));
+  server.registerTool("core_plan", { title: "Plan Core Intent", description: "Plan a structured provider-agnostic Core intent without writing.", inputSchema: { intent: z.string().min(1), input: z.record(z.string(), z.unknown()).optional(), action: z.string().optional() }, annotations: { readOnlyHint: true, idempotentHint: true } }, async (input) => jsonResult(planIntent(await loadConfig(), input)));
+  server.registerTool("core_execute", { title: "Execute Core Plan", description: "Execute a Core plan; writes require confirmed=true.", inputSchema: { plan: z.unknown(), confirmed: z.boolean().optional() }, annotations: { readOnlyHint: false } }, async (input) => jsonResult(await executePlan(await loadConfig(), input.plan, { confirmed: input.confirmed })));
   server.registerTool("skill_show", { title: "Show Skill", description: "Show one discovered skill without executing its Markdown body.", inputSchema: { id: z.string().min(1) }, annotations: { readOnlyHint: true, idempotentHint: true } }, async ({ id }) => {
     const skill = await getSkill(await loadConfig(), id);
     if (!skill) throw new Error(`Skill not found: ${id}`);

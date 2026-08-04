@@ -170,3 +170,10 @@ npm run typecheck
 npm test
 npm run build
 ```
+# Ruta Core estructurada
+
+T.H.O.T.H. mantiene sus comandos CLI y herramientas MCP existentes. La ruta
+nueva y provider-agnostic permite planificar y ejecutar intents JSON mediante
+`thoth core plan --input '<json>'` y `thoth core execute --input '<plan>'
+[--confirmed]`, o MCP `core_plan`/`core_execute`. Las escrituras siempre exigen
+confirmación; las consultas son progresivas y limitadas.

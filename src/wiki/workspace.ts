@@ -253,7 +253,9 @@ export type WikiRelateResult = {
   created: boolean;
 };
 
-export type WikiSearchFilters = WikiListFilters;
+export type WikiSearchFilters = WikiListFilters & {
+  limit?: number;
+};
 
 export type WikiSearchResult = WikiDocumentSummary & {
   snippet: string;
@@ -716,17 +718,31 @@ export async function searchWikiDocuments(
   query: string,
   filters: WikiSearchFilters = {},
 ): Promise<WikiSearchResult[]> {
+  const limit = filters.limit ?? 20;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) {
+    throw new Error("Search limit must be a safe integer between 1 and 20");
+  }
+
+  if (typeof query !== "string") {
+    throw new Error("Search query must be a string");
+  }
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    throw new Error("Search query must not be empty");
+  }
+  if (trimmedQuery.length > 500) {
+    throw new Error("Search query must be at most 500 characters");
+  }
+  const normalizedQuery = trimmedQuery.toLowerCase();
+
   if (!(await pathExists(config.resolvedWikiPath))) {
     return [];
   }
 
-  const normalizedQuery = query.trim().toLowerCase();
-
-  if (!normalizedQuery) {
-    return [];
-  }
-
-  const markdownPaths = await collectMarkdownFiles(config.resolvedWikiPath);
+  // Bound work after establishing a stable traversal order; readdir order is
+  // filesystem-dependent and must not affect which limited results are read.
+  const markdownPaths = (await collectMarkdownFiles(config.resolvedWikiPath))
+    .sort((left, right) => left.localeCompare(right));
   const results: WikiSearchResult[] = [];
 
   for (const markdownPath of markdownPaths) {
@@ -747,9 +763,15 @@ export async function searchWikiDocuments(
 
     if (searchableText.toLowerCase().includes(normalizedQuery)) {
       results.push({
-        ...document,
+        id: document.id,
+        title: document.title,
+        type: document.type,
+        status: document.status,
+        tags: [...document.tags],
+        path: document.path,
         snippet: createSnippet(searchableText, normalizedQuery),
       });
+      if (results.length >= limit) break;
     }
   }
 
@@ -1803,7 +1825,7 @@ function createSnippet(text: string, normalizedQuery: string): string {
   const prefix = start > 0 ? "..." : "";
   const suffix = end < compactText.length ? "..." : "";
 
-  return `${prefix}${compactText.slice(start, end)}${suffix}`;
+  return `${prefix}${compactText.slice(start, end)}${suffix}`.slice(0, 500);
 }
 
 function createWikiIndex(): string {

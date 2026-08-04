@@ -31,7 +31,7 @@ import {
   validWikiDocumentTypes,
   validWikiRelationTypes,
 } from "../actions/index.js";
-import { loadConfig } from "../core/index.js";
+import { executePlan, loadConfig, planIntent, type IntentRequest, type ThothPlan } from "../core/index.js";
 import { discoverSkills, getSkill, runSkill, validateSkills } from "../skills/index.js";
 
 const thothVersion = "0.6.0";
@@ -44,6 +44,24 @@ program
   .name("thoth")
   .description("T.H.O.T.H. local operations CLI")
   .version(thothVersion);
+
+const core = program.command("core").description("Structured provider-agnostic Core API");
+core.command("plan").requiredOption("--input <json>", "IntentRequest JSON").action(async (options: { input: string }) => {
+  try {
+    const request = parseJson<IntentRequest>(options.input);
+    const plan = planIntent(await loadConfig(), request);
+    console.log(JSON.stringify(plan, null, 2));
+    if (plan.status === "error") process.exitCode = 1;
+  } catch (error) { reportCoreError(error); }
+});
+core.command("execute").requiredOption("--input <json>", "ThothPlan JSON").option("--confirmed", "Allow write steps").action(async (options: { input: string; confirmed?: boolean }) => {
+  try {
+    const plan = parseJson<ThothPlan>(options.input);
+    const result = await executePlan(await loadConfig(), plan, { confirmed: options.confirmed });
+    console.log(JSON.stringify(result, null, 2));
+    if (!result.ok) process.exitCode = 1;
+  } catch (error) { reportCoreError(error); }
+});
 
 program
   .command("init")
@@ -261,14 +279,16 @@ program
   .option("--type <type>", documentTypeHelp)
   .option("--status <status>", "Filter by document status")
   .option("--tag <tag>", "Filter by tag")
+  .option("--limit <n>", "Maximum results (1-20)", "20")
   .action(
     async (
       query: string,
-      options: { type?: string; status?: string; tag?: string },
+      options: { type?: string; status?: string; tag?: string; limit: string },
     ) => {
       try {
         const config = await loadConfig();
-        const results = await searchWikiDocuments(config, query, options);
+        const limit = Number(options.limit);
+        const results = await searchWikiDocuments(config, query, { ...options, limit });
 
         if (results.length === 0) {
           console.log("No wiki documents matched.");
@@ -709,6 +729,15 @@ function reportError(error: unknown): never {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`T.H.O.T.H. cannot proceed: ${message}`);
   process.exit(1);
+}
+
+function reportCoreError(error: unknown): never {
+  console.error(JSON.stringify({ ok: false, status: "error", error: { code: "invalid_input", message: error instanceof Error ? error.message : String(error) } }, null, 2));
+  process.exit(1);
+}
+
+function parseJson<T>(value: string): T {
+  try { return JSON.parse(value) as T; } catch { throw new Error("--input must be valid JSON"); }
 }
 
 function collectValues(value: string, previous: string[]): string[] {

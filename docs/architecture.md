@@ -27,16 +27,32 @@ flowchart TD
 
 ### T.H.O.T.H. Core
 
-El nucleo del sistema. Coordina el flujo de trabajo general y decide como debe procesarse cada entrada de informacion.
+El nucleo ejecutable nuevo (`src/core`) ofrece contratos estructurados y una ruta
+provider-agnostic: `planIntent` no interpreta lenguaje natural ni llama modelos,
+agentes, shell o proveedores; `executePlan` solo despacha acciones allowlisted.
+Las escrituras siempre requieren confirmación explícita.
 
 Responsabilidades iniciales:
 
 - recibir informacion del usuario o de una interfaz
-- analizar tipo, intencion y contexto del contenido
-- decidir si procesa directamente o delega
-- seleccionar agentes o skills necesarias
-- coordinar escritura, actualizacion y consulta de la LLM Wiki
-- mantener consistencia entre documentos relacionados
+- planificar intents explícitos (`query`, `list`, `show`, `capture`, `update`,
+  `append`, `relate`, `log`, `index`, `lint`, `source_add`, `source_link`,
+  `clarify`, `ignore`)
+- ejecutar handlers locales de lectura y propuestas de escritura
+- recuperar consultas progresivamente mediante la skill `wiki-query`, limitada
+  a candidatos y snippets
+
+`core_plan`/`core_execute` son la ruta estructurada provider-agnostic: requieren
+confirmación para writes y rechazan acciones no atómicas. La CLI y las tools
+MCP legacy siguen existiendo por compatibilidad y todavía no están migradas al
+Core; por tanto el Core no es una garantía global de toda la aplicación.
+Cada plan admite como máximo 20 pasos; los planes mayores se rechazan antes de
+ejecutar cualquier paso. `relate`, `log`, `index` y `source_link` aparecen en
+el contrato para ser rechazados como no atómicos hasta disponer de transacciones.
+
+En particular, `wiki_show` y los resources MCP son superficies legacy de lectura
+intencional: pueden devolver `content`, `raw` o `metadata` bajo demanda. Esa
+excepción no aplica a la búsqueda resumida del Core ni a `wiki_search`.
 
 ### Agentes
 

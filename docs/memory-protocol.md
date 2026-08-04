@@ -1,5 +1,25 @@
 # Memory Protocol
 
+## Core estructurado
+
+El Core usa una relación estricta intent→action. `query` solo usa
+`skill.wiki-query` y devuelve candidatos resumidos (máximo 20); no puede
+ejecutar `show` ni devolver `content`, `raw` o `metadata`. Para leer un
+documento se debe solicitar explícitamente el intent `show` con `wiki.show`,
+incluyendo un `id` seleccionado.
+
+Los intents `list`, `show`, `capture`, `update`, `append`, `relate`, `log`,
+`index`, `lint`, `source_add` y `source_link` tienen acciones únicas; una acción cruzada se rechaza. Los
+planes se validan completamente antes de ejecutarse. Un plan con más de una
+escritura devuelve `non_atomic_plan`; las escrituras individuales requieren
+`confirmed: true` y sin confirmación devuelven `confirmation_required`.
+Un plan admite como máximo 20 pasos; superar ese límite devuelve
+`plan_too_large` antes de ejecutar cualquier paso.
+`core_plan`/`core_execute` son la ruta estructurada provider-agnostic, no una
+garantía global: la CLI y MCP legacy siguen existiendo sin estar migradas.
+`wiki_show` y los resources MCP son excepciones intencionales de lectura y
+pueden devolver `content`, `raw` o `metadata` cuando se solicitan explícitamente.
+
 El Memory Protocol define cuando y como T.H.O.T.H. debe guardar, consultar, actualizar y relacionar conocimiento durante una conversacion con un LLM.
 
 Su objetivo es evitar que la memoria sea una acumulacion pasiva de notas. T.H.O.T.H. debe actuar de forma intencional: guardar informacion relevante, recuperar contexto util y mantener una LLM Wiki clara, conectada y reutilizable.
@@ -288,3 +308,18 @@ La primera implementacion debe cubrir un subconjunto simple:
 5. generar resumenes simples de sesion
 
 Las capacidades avanzadas de conflictos, grafos y RAG deben construirse sobre esta base.
+# Core estructurado
+
+La ruta nueva recibe un `IntentRequest` JSON y produce un `ThothPlan`. Los
+intents allowlisted incluyen `query`, `list`, `show`, `capture`, `update`,
+`append`, `relate`, `log`, `index`, `lint`, `source_add` y `source_link`.
+`clarify` e `ignore` no tienen handler ejecutable y devuelven
+`not_allowlisted`.
+
+Los pasos declaran `write: boolean`. `executePlan` nunca ejecuta un paso de
+escritura sin `{ confirmed: true }`; en ese caso devuelve `proposal` y no
+modifica la wiki. `query` usa recuperación resumida (`wiki-query`), con un
+máximo de 20 candidatos y snippets de 500 caracteres. El Core no interpreta
+lenguaje natural ni invoca proveedores, modelos, agentes o shell. `relate`,
+`log`, `index` y `source_link` se rechazan con `non_atomic_action`, porque sus
+handlers pueden escribir varios archivos; el Core no intenta rollback parcial.

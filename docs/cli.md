@@ -5,6 +5,17 @@ usa Markdown como fuente de verdad; los índices son derivados.
 
 ## Comandos implementados
 
+### Core estructurado
+
+- `thoth core plan --input '<IntentRequest JSON>'`
+- `thoth core execute --input '<ThothPlan JSON>' [--confirmed]`
+
+Ambos imprimen JSON. El segundo devuelve una propuesta para escrituras sin
+`--confirmed`; los errores tienen código de salida 1. `query` no permite
+`show` ni contenido completo; usa `core plan` con intent `show` y un id
+seleccionado para ello. Los comandos CLI
+anteriores siguen disponibles sin cambios.
+
 ### Workspace
 
 - `thoth init`: crea la wiki configurada, sus directorios requeridos,
@@ -21,7 +32,7 @@ usa Markdown como fuente de verdad; los índices son derivados.
 - `thoth capture <content> [--type <type>] [--title <title>] [--status <status>] [--project <id>] [--tag <tag>]...`
 - `thoth append <id> <content> [--section <section>]` (por defecto,
   `Notes`).
-- `thoth search <query> [--type <type>] [--status <status>] [--tag <tag>]`
+- `thoth search <query> [--type <type>] [--status <status>] [--tag <tag>] [--limit <1-20>]`
 - `thoth update <id> [--title <title>] [--type <type>] [--status <status>] [--tag <tag>]...`
 - `thoth relate <source> <target> --relation <relation>`
 
@@ -32,7 +43,8 @@ Las relaciones válidas son: `belongs_to`, `mentions`, `depends_on`,
 `extends`, `follows`, `implements`, `fixes`, `parallels`, `verifies`,
 `documents`, `has_log`, `has_subarea` y `has_verification`.
 
-`capture` recibe contenido textual directo; no implementa `--file` ni
+La búsqueda devuelve solo `id`, título, tipo, estado, tags, ruta y snippet;
+`--limit` tiene máximo 20 y por defecto es 20. `capture` recibe contenido textual directo; no implementa `--file` ni
 `--tags`, y las fuentes no se capturan con `--type source`. Las tareas
 requieren `--project` y un proyecto existente. `show` ofrece `--raw` y
 `--metadata`; no existe `--summary`.
