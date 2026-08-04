@@ -33,6 +33,7 @@ import {
 import { executePlan, loadConfig, planIntent, type IntentRequest, type ThothPlan } from "../core/index.js";
 import { discoverSkills, getSkill, runSkill, validateSkills } from "../skills/index.js";
 import { formatCliSearch, runCliSearch } from "./search.js";
+import { listAuditEvents, recordAudit, validateAuditLimit, verifyAudit } from "../audit/index.js";
 
 const thothVersion = "0.6.0";
 const program = new Command();
@@ -49,7 +50,9 @@ const core = program.command("core").description("Structured provider-agnostic C
 core.command("plan").requiredOption("--input <json>", "IntentRequest JSON").action(async (options: { input: string }) => {
   try {
     const request = parseJson<IntentRequest>(options.input);
-    const plan = planIntent(await loadConfig(), request);
+    const config = await loadConfig();
+    const plan = planIntent(config, request);
+    await recordAudit(config, { operation: "core.plan", surface: "cli", actor: config.audit?.actor ?? "system", result: plan.status === "error" ? "rejected" : "planned", affectedIds: typeof request.intent === "string" ? [request.intent] : [], durationMs: 0, error: plan.error ? { code: plan.error.code, message: plan.error.message } : undefined });
     console.log(JSON.stringify(plan, null, 2));
     if (plan.status === "error") process.exitCode = 1;
   } catch (error) { reportCoreError(error); }
@@ -708,6 +711,14 @@ agents
 const skills = program.command("skills").description("Discover and run safe, allowlisted skills");
 skills.command("list").description("List discovered skills").action(async () => {
   try { const config = await loadConfig(); for (const skill of await discoverSkills(config)) console.log(`${skill.id}\t${skill.version}\t${skill.category}\t${skill.status}\t${skill.path}`); } catch (error) { reportError(error); }
+});
+
+const audit = program.command("audit").description("Inspect the structured append-only audit log");
+audit.command("list").option("--limit <n>", "Maximum events", "100").action(async (options: { limit: string }) => {
+  try { const limit = Number(options.limit); validateAuditLimit(limit); const events = await listAuditEvents(await loadConfig(), limit); console.log(JSON.stringify(events, null, 2)); } catch (error) { reportError(error); }
+});
+audit.command("verify").action(async () => {
+  try { const result = await verifyAudit(await loadConfig()); console.log(JSON.stringify(result, null, 2)); if (!result.valid) process.exitCode = 1; } catch (error) { reportError(error); }
 });
 skills.command("show").argument("<id>", "Skill id").description("Show skill metadata").action(async (id: string) => {
   try { const skill = await getSkill(await loadConfig(), id); if (!skill) throw new Error(`Skill not found: ${id}`); console.log(JSON.stringify({ ...skill, body: undefined }, null, 2)); } catch (error) { reportError(error); }

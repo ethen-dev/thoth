@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { getSkill } from "./registry.js";
 import type { SkillProviderAdapter, SkillProviderRequest, SkillResult, SkillRuntimeConfig, SkillInvocation } from "./types.js";
 import { z } from "zod/v4";
+import { recordAudit } from "../audit/index.js";
 
 const emptyFilter = z.preprocess((value) => value === "" ? undefined : value, z.string().min(1).optional());
 const querySchema = z.object({ query: z.string().trim().min(1).max(500), type: emptyFilter, status: emptyFilter, tag: emptyFilter, limit: z.number().int().min(1).max(20).default(20) }).strict();
@@ -27,6 +28,13 @@ const proposalSchema = z.object({
 }).strict();
 
 export async function runSkill(config: SkillRuntimeConfig, invocation: SkillInvocation, provider?: SkillProviderAdapter): Promise<SkillResult> {
+  const started = Date.now();
+  const result = await runSkillInternal(config, invocation, provider);
+  await recordAudit(config, { operation: `skill.${invocation?.skillId ?? "unknown"}.${invocation?.mode ?? "error"}`, surface: "skill", actor: config.audit?.actor ?? "system", result: result.ok ? (invocation.mode === "plan" ? "planned" : invocation.mode === "execute" && !result.readOnly ? "executed" : "proposed") : (result.error?.code === "confirmation_required" ? "proposed" : "error"), affectedIds: invocation?.skillId ? [invocation.skillId] : [], durationMs: Date.now() - started, error: result.error ? { code: result.error.code, message: result.error.message } : undefined });
+  return result;
+}
+
+async function runSkillInternal(config: SkillRuntimeConfig, invocation: SkillInvocation, provider?: SkillProviderAdapter): Promise<SkillResult> {
   if (!invocation || !["validate", "plan", "dry-run", "execute"].includes(invocation.mode)) return failure(String(invocation?.skillId ?? ""), "invalid_mode", "mode must be validate, plan, dry-run or execute", "execute");
   let skill;
   try {

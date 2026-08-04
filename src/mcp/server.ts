@@ -20,6 +20,7 @@ import {
 } from "../actions/index.js";
 import { executePlan, loadConfig, planIntent, queryThroughCore } from "../core/index.js";
 import { discoverSkills, getSkill, runSkill, validateSkills } from "../skills/index.js";
+import { listAuditEvents, recordAudit } from "../audit/index.js";
 
 export function createThothMcpServer(): McpServer {
   const server = new McpServer({
@@ -335,7 +336,8 @@ export function createThothMcpServer(): McpServer {
   );
 
   server.registerTool("skill_list", { title: "List Skills", description: "List discovered skill metadata.", annotations: { readOnlyHint: true, idempotentHint: true } }, async () => jsonResult({ skills: (await discoverSkills(await loadConfig())).map(({ body: _body, ...manifest }) => manifest) }));
-  server.registerTool("core_plan", { title: "Plan Core Intent", description: "Plan a structured provider-agnostic Core intent without writing.", inputSchema: { intent: z.string().min(1), input: z.record(z.string(), z.unknown()).optional(), action: z.string().optional() }, annotations: { readOnlyHint: true, idempotentHint: true } }, async (input) => jsonResult(planIntent(await loadConfig(), input)));
+  server.registerTool("audit_list", { title: "List Audit Events", description: "Read bounded structured audit events without prompts or content.", inputSchema: { limit: z.number().int().min(1).max(1000).default(100) }, annotations: { readOnlyHint: true, idempotentHint: true } }, async ({ limit }) => jsonResult({ events: await listAuditEvents(await loadConfig(), limit) }));
+  server.registerTool("core_plan", { title: "Plan Core Intent", description: "Plan a structured provider-agnostic Core intent without writing.", inputSchema: { intent: z.string().min(1), input: z.record(z.string(), z.unknown()).optional(), action: z.string().optional() }, annotations: { readOnlyHint: true, idempotentHint: true } }, async (input) => { const config = await loadConfig(); const plan = planIntent(config, input); await recordAudit(config, { operation: "core.plan", surface: "mcp", actor: config.audit?.actor ?? "system", result: plan.status === "error" ? "rejected" : "planned", affectedIds: [input.intent], durationMs: 0, error: plan.error ? { code: plan.error.code, message: plan.error.message } : undefined }); return jsonResult(plan); });
   server.registerTool("core_execute", { title: "Execute Core Plan", description: "Execute a Core plan; writes require confirmed=true.", inputSchema: { plan: z.unknown(), confirmed: z.boolean().optional() }, annotations: { readOnlyHint: false } }, async (input) => jsonResult(await executePlan(await loadConfig(), input.plan, { confirmed: input.confirmed })));
   server.registerTool("skill_show", { title: "Show Skill", description: "Show one discovered skill without executing its Markdown body.", inputSchema: { id: z.string().min(1) }, annotations: { readOnlyHint: true, idempotentHint: true } }, async ({ id }) => {
     const skill = await getSkill(await loadConfig(), id);

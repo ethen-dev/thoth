@@ -1,6 +1,7 @@
 import type { ResolvedThothConfig } from "../core/index.js";
 import { getAgent } from "./registry.js";
 import type { AgentRegistryEntry } from "./registry.js";
+import { recordAudit } from "../audit/index.js";
 
 export const maxAgentInputLength = 8_000;
 export const maxAgentOutputLength = 16_000;
@@ -68,6 +69,17 @@ export type AgentExecutionResult = {
 };
 
 export async function executeAgent(
+  config: ResolvedThothConfig,
+  request: AgentExecutionRequest,
+  adapter?: AgentAdapter,
+): Promise<AgentExecutionResult> {
+  const started = Date.now();
+  const result = await executeAgentInternal(config, request, adapter);
+  await recordAudit(config, { operation: `agent.${request?.agentId ?? "unknown"}.${request?.mode ?? "error"}`, surface: "agent", actor: config.audit?.actor ?? "system", result: result.ok ? (result.status === "planned" ? "planned" : result.status === "executed" ? "executed" : "proposed") : "error", affectedIds: request?.agentId ? [request.agentId] : [], durationMs: Date.now() - started, error: result.error ? { code: result.error.code, message: result.error.message } : undefined });
+  return result;
+}
+
+async function executeAgentInternal(
   config: ResolvedThothConfig,
   request: AgentExecutionRequest,
   adapter?: AgentAdapter,

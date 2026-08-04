@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thoth.local/schemas/audit-event.schema.json",
+  "title": "T.H.O.T.H. Audit Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "timestamp", "operation", "surface", "actor", "result", "affectedIds", "durationMs"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "timestamp": { "type": "string", "minLength": 1 },
+    "operation": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "surface": { "enum": ["core", "cli", "mcp", "skill", "agent"] },
+    "actor": { "type": "string", "maxLength": 500 },
+    "result": { "enum": ["planned", "proposed", "confirmed", "executed", "rejected", "error"] },
+    "affectedIds": { "type": "array", "maxItems": 50, "items": { "type": "string", "maxLength": 500 } },
+    "durationMs": { "type": "number", "minimum": 0 },
+    "error": { "type": "object", "additionalProperties": false, "required": ["message"], "properties": { "code": { "type": "string" }, "message": { "type": "string", "maxLength": 500 } } }
+  }
+}

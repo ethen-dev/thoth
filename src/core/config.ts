@@ -7,6 +7,16 @@ export type ThothConfig = {
   defaultType: string;
   defaultStatus: string;
   dateFormat: string;
+  audit?: AuditConfig;
+};
+
+export type AuditConfig = {
+  enabled?: boolean;
+  path?: string;
+  actor?: string;
+  maxEntryBytes?: number;
+  maxStringLength?: number;
+  redactKeys?: string[];
 };
 
 export const supportedDateFormats = [
@@ -28,6 +38,7 @@ const defaultConfig: ThothConfig = {
   defaultType: "note",
   defaultStatus: "draft",
   dateFormat: "YYYY-MM-DD",
+  audit: { enabled: true },
 };
 
 export function resolveDateFormat(value: unknown): DateFormat {
@@ -43,7 +54,7 @@ export async function loadConfig(
   const resolvedWorkspacePath = path.dirname(configPath);
   const rawConfig = await readFile(configPath, "utf8");
   const parsedConfig = JSON.parse(rawConfig) as Partial<ThothConfig>;
-  const config: ThothConfig = { ...defaultConfig, ...parsedConfig, dateFormat: resolveDateFormat(parsedConfig.dateFormat) };
+  const config: ThothConfig = { ...defaultConfig, ...parsedConfig, audit: { ...defaultConfig.audit, ...(parsedConfig.audit ?? {}) }, dateFormat: resolveDateFormat(parsedConfig.dateFormat) };
 
   if (!config.wikiPath || typeof config.wikiPath !== "string") {
     throw new Error("Invalid thoth.config.json: wikiPath must be a string.");

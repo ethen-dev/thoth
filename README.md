@@ -11,6 +11,7 @@ The current MVP is local-first. Markdown is the source of truth. `.thoth/index.j
 Usable local MVP components:
 
 - CLI: `init`, `status`, `list`, `show`, `capture`, `append`, `log`, `search`, `index`, `lint`, `sync-links`, `update`, `relate`, `source`, `doctor` and `agents`.
+- Structured audit: `audit list` and `audit verify`; events are stored by default at `wiki/logs/audit.jsonl`.
 - MCP stdio server with the implemented tools, resources, and `capture_memory` prompt listed below.
 - JSON Schemas for wiki documents and derived indexes.
 - External wiki support via `thoth.config.json`.
@@ -194,6 +195,15 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+Audit is enabled by default, append-only and protected by the existing workspace
+lock. Core, skills and agents emit audit events. Legacy CLI/MCP wiki commands
+are not yet audited or confirmation-tracked; this task intentionally does not
+migrate those surfaces. It records operation metadata only: prompts, content
+and sensitive inputs are never recorded. Configure `audit.enabled`,
+`audit.path`, `audit.actor`, `audit.redactKeys`, `audit.maxEntryBytes` and
+`audit.maxStringLength` in `thoth.config.json`; audit write failures return a
+warning internally and never block the operation.
 # Ruta Core estructurada
 
 T.H.O.T.H. mantiene sus comandos CLI y herramientas MCP existentes. La ruta

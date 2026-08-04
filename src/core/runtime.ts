@@ -5,6 +5,7 @@ import {
   rebuildWikiIndex, updateWikiDocument, linkWikiSourceDocument,
 } from "../actions/index.js";
 import { runSkill } from "../skills/runtime.js";
+import { recordAudit } from "../audit/index.js";
 import type { ResolvedThothConfig } from "./config.js";
 import { coreIntents, maxCorePlanSteps, type CoreAction, type CoreError, type CoreResult, type IntentRequest, type PlanStep, type ThothPlan } from "./types.js";
 
@@ -38,19 +39,20 @@ export function planIntent(_config: ResolvedThothConfig, request: IntentRequest)
 
 /** Validates the complete untrusted plan before reading any step fields. */
 export async function executePlan(config: ResolvedThothConfig, candidate: unknown, options: { confirmed?: boolean } = {}): Promise<CoreResult> {
+  const started = Date.now();
   const checked = validatePlan(candidate);
-  if (!checked.ok) return { ok: false, status: "error", intent: checked.intent, error: checked.error };
+  if (!checked.ok) { const result = { ok: false, status: "error" as const, intent: checked.intent, error: checked.error }; await auditCore(config, "rejection", result, started); return result; }
   const plan = checked.plan;
   const writes = plan.steps.filter((step) => step.write);
-  if (writes.length > 1) return { ok: false, status: "error", intent: plan.intent, error: coreError("non_atomic_plan", "Plans with more than one write are not supported") };
-  if (plan.confirmationRequired !== (writes.length > 0)) return { ok: false, status: "error", intent: plan.intent, error: coreError("invalid_input", "confirmationRequired does not match plan writes") };
-  if (writes.length > 0 && !options.confirmed) return { ok: true, status: "proposal", intent: plan.intent, plan, error: coreError("confirmation_required", "Confirmation is required before writing") };
+  if (writes.length > 1) { const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("non_atomic_plan", "Plans with more than one write are not supported") }; await auditCore(config, "rejection", result, started); return result; }
+  if (plan.confirmationRequired !== (writes.length > 0)) { const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("invalid_input", "confirmationRequired does not match plan writes") }; await auditCore(config, "rejection", result, started); return result; }
+  if (writes.length > 0 && !options.confirmed) { const result = { ok: true, status: "proposal" as const, intent: plan.intent, plan, error: coreError("confirmation_required", "Confirmation is required before writing") }; await auditCore(config, "proposal", result, started); return result; }
   try {
     const results: unknown[] = [];
     for (const step of plan.steps) results.push(await executeStep(config, step));
-    return { ok: true, status: "executed", intent: plan.intent, results };
+    const result = { ok: true, status: "executed" as const, intent: plan.intent, results }; await auditCore(config, "executed", result, started); return result;
   } catch (cause) {
-    return { ok: false, status: "error", intent: plan.intent, error: coreError("execution_error", cause instanceof Error ? cause.message : String(cause)) };
+    const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("execution_error", cause instanceof Error ? cause.message : String(cause)) }; await auditCore(config, "error", result, started); return result;
   }
 }
 
@@ -116,3 +118,7 @@ function validateStepInput(intent: string, value: unknown, action: CoreAction): 
   return parsed.success ? { value: parsed.data } : { error: coreError("invalid_input", "Invalid intent input", parsed.error.issues) };
 }
 function coreError(code: CoreError["code"], message: string, details?: unknown): CoreError { return { code, message, ...(details === undefined ? {} : { details }) }; }
+
+async function auditCore(config: ResolvedThothConfig, result: "proposal" | "rejection" | "executed" | "error", value: CoreResult, started: number): Promise<void> {
+  await recordAudit(config, { operation: `core.${result}`, surface: "core", actor: config.audit?.actor ?? "system", result: result === "proposal" ? "proposed" : result === "rejection" ? "rejected" : result, affectedIds: [value.intent], durationMs: Date.now() - started, error: value.error ? { code: value.error.code, message: value.error.message } : undefined });
+}

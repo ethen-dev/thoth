@@ -11,6 +11,18 @@
     "dateFormat": {
       "type": "string",
       "enum": ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD"]
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "path": { "type": "string", "minLength": 1 },
+        "actor": { "type": "string", "minLength": 1 },
+        "maxEntryBytes": { "type": "integer", "minimum": 256, "maximum": 1048576 },
+        "maxStringLength": { "type": "integer", "minimum": 32, "maximum": 10000 },
+        "redactKeys": { "type": "array", "items": { "type": "string" } }
+      }
     }
   }
 }
