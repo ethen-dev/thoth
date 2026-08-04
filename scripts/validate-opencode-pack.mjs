@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import process from "node:process";
+import matter from "gray-matter";
 
 const root = process.cwd();
 const agentPath = join(root, "opencode", "agents", "thoth-memory.md");
@@ -62,12 +63,21 @@ const requiredAgentSnippets = [
   "Markdown links",
   "mode: primary",
   "edit: deny",
-  "\"*\": allow",
+  "task:\n    \"thoth-archivist\": allow",
+  "bash:\n    \"*\": deny",
   "\"**/.env*\": deny",
   "\"git push*\": deny",
   "\"sudo*\": deny",
   "webfetch: allow",
   "external_directory: allow",
+  "npm test*",
+  "npm run typecheck*",
+  "npm run opencode:validate*",
+  "git diff --check*",
+  "git diff --stat*",
+  "npm pack --dry-run*",
+  "opencode --version",
+  "thoth *",
   "You are T.H.O.T.H.",
 ];
 
@@ -105,11 +115,223 @@ const requiredReadmeSnippets = [
 
 const requiredSubagentSnippets = [
   "mode: subagent",
-  "\"*\": allow",
+  "bash:\n    \"*\": deny",
   "\"**/.env*\": deny",
   "\"git push*\": deny",
   "\"sudo*\": deny",
 ];
+
+const requiredDevelopmentSubagentSnippets = [
+  "task:",
+  "\"thoth-scribe\": allow",
+  "npm test*",
+  "npm run typecheck*",
+  "npm run opencode:validate*",
+  "npm pack --dry-run*",
+  "opencode --version",
+  "thoth *",
+];
+
+const safeBashAllows = new Set([
+  "pwd",
+  "ls*",
+  "which*",
+  "test*",
+  "git status*",
+  "git diff --check*",
+  "git diff --stat*",
+  "git log*",
+  "git show*",
+  "git rev-parse*",
+  "git branch --show-current",
+  "git ls-files*",
+  "npm test*",
+  "npm run typecheck*",
+  "npm run build*",
+  "npm run opencode:validate*",
+  "npm pack --dry-run*",
+  "opencode --version",
+  "opencode --help",
+  "opencode models",
+  "thoth *",
+]);
+
+const forbiddenBashAllows = [
+  "node*",
+  "python*",
+  "sh*",
+  "bash*",
+  "zsh*",
+  "npm run*",
+  "npm exec*",
+  "npm pack*",
+  "npm run package:smoke*",
+  "npm run dev -- *",
+  "npx*",
+  "curl*",
+  "wget*",
+  "git push*",
+  "git diff*",
+  "git diff --no-index*",
+  "git reset --hard*",
+  "git clean*",
+  "sudo*",
+];
+
+const requiredBashDenies = [
+  "git push*",
+  "git reset --hard*",
+  "git clean*",
+  "sudo*",
+  "rm*",
+  "shred*",
+  "mkfs*",
+  "dd*",
+  "cat .env*",
+  "cat ~/.ssh*",
+];
+
+const requiredWrapperDenies = [
+  "*;*",
+  "*&&*",
+  "*||*",
+  "*|*",
+  "*`*",
+  "*$(*",
+  "*${*",
+  "*<*",
+  "*>*",
+  "*>>*",
+  "*&*",
+  "*(*)",
+  "*\\*",
+  "*\n*",
+];
+
+const approvedTaskAgents = [
+  "thoth-archivist",
+  "thoth-indexer",
+  "thoth-scribe",
+  "thoth-critic",
+  "thoth-dev-router",
+  "thoth-dev-explorer",
+  "thoth-dev-implementer",
+  "thoth-dev-reviewer",
+  "thoth-dev-verifier",
+  "thoth-dev-receipt",
+];
+
+const requiredReadSecretPatterns = [
+  "**/.env*",
+  "**/.ssh/**",
+  "**/.aws/**",
+  "**/.npmrc",
+  "**/.pypirc",
+  "**/*.pem",
+  "**/*.key",
+  "**/*.p12",
+  "**/*.pfx",
+  "**/*id_rsa*",
+  "**/*id_ed25519*",
+  "**/credentials*",
+  "**/*kubeconfig*",
+  "**/*.asc",
+  "**/*.gpg",
+  "**/*secret*",
+  "**/*token*",
+  "**/*credential*",
+  "**/*password*",
+  "**/*.crt",
+  "**/*.der",
+  "**/docker/config.json",
+];
+
+const expectedTaskPermissions = {
+  "thoth-memory.md": Object.fromEntries(approvedTaskAgents.map((agent) => [agent, "allow"])),
+  "thoth-dev-router.md": {
+    "thoth-dev-explorer": "allow",
+    "thoth-dev-implementer": "allow",
+    "thoth-scribe": "allow",
+  },
+  "thoth-dev-implementer.md": {
+    "thoth-dev-reviewer": "allow",
+    "thoth-dev-verifier": "allow",
+    "thoth-scribe": "allow",
+  },
+  "thoth-dev-reviewer.md": {
+    "thoth-dev-verifier": "allow",
+    "thoth-scribe": "allow",
+  },
+  "thoth-dev-explorer.md": { "thoth-scribe": "allow" },
+  "thoth-dev-verifier.md": { "thoth-scribe": "allow" },
+  "thoth-dev-receipt.md": { "thoth-scribe": "allow" },
+};
+
+function assertPermissionContract(path, content) {
+  const data = matter(content).data;
+  const permissions = data.permission;
+  const bash = permissions?.bash;
+  if (!bash || bash["*"] !== "deny") {
+    throw new Error(`${path} must set bash "*" to deny`);
+  }
+
+  for (const command of Object.keys(bash)) {
+    if (bash[command] === "allow" && !safeBashAllows.has(command)) {
+      throw new Error(`${path} has an unsafe bash allow: ${command}`);
+    }
+  }
+  for (const command of forbiddenBashAllows) {
+    if (bash[command] === "allow") {
+      throw new Error(`${path} must not allow: ${command}`);
+    }
+  }
+  for (const command of requiredBashDenies) {
+    if (bash[command] !== "deny") {
+      throw new Error(`${path} must deny: ${command}`);
+    }
+  }
+  const lastAllow = Math.max(
+    ...Object.entries(bash)
+      .filter(([, value]) => value === "allow")
+      .map(([command]) => Object.keys(bash).indexOf(command)),
+  );
+  for (const command of requiredWrapperDenies) {
+    if (bash[command] !== "deny") {
+      throw new Error(`${path} must deny shell metacharacter pattern ${command}`);
+    }
+    if (Object.keys(bash).indexOf(command) <= lastAllow) {
+      throw new Error(`${path} must place shell metacharacter denials after allows`);
+    }
+  }
+
+  for (const pattern of requiredReadSecretPatterns) {
+    if (permissions.read?.[pattern] !== "deny") {
+      throw new Error(`${path} must deny read for ${pattern}`);
+    }
+  }
+
+  const task = permissions?.task;
+  const taskFile = Object.keys(expectedTaskPermissions).find((name) => path.endsWith(name));
+  if (taskFile && JSON.stringify(task) !== JSON.stringify(expectedTaskPermissions[taskFile])) {
+    throw new Error(`${path} has task permissions outside the approved flow`);
+  }
+  if (!taskFile && task !== undefined) {
+    throw new Error(`${path} must not define task permissions`);
+  }
+
+  if (path.endsWith("thoth-dev-implementer.md")) {
+    if (permissions.edit?.["*"] !== "allow") {
+      throw new Error(`${path} must allow edit for implementation work`);
+    }
+    for (const pattern of requiredReadSecretPatterns) {
+      if (permissions.edit?.[pattern] !== "deny") {
+        throw new Error(`${path} must deny edit and read for ${pattern}`);
+      }
+    }
+  } else if (permissions.edit !== "deny") {
+    throw new Error(`${path} must keep edit denied`);
+  }
+}
 
 const requiredAutonomousMemoryDocSnippets = [
   "autonomous-transparent",
@@ -201,12 +423,17 @@ const [agent, readme, autonomousMemoryDoc] = await Promise.all([
 ]);
 
 assertIncludes(agent, requiredAgentSnippets, "OpenCode agent");
+assertPermissionContract(agentPath, agent);
 assertIncludes(readme, requiredReadmeSnippets, "OpenCode README");
 assertIncludes(autonomousMemoryDoc, requiredAutonomousMemoryDocSnippets, "Autonomous memory doc");
 
 const subagents = await Promise.all(subagentPaths.map((path) => readFile(path, "utf8")));
 for (const [index, subagent] of subagents.entries()) {
   assertIncludes(subagent, requiredSubagentSnippets, `OpenCode subagent ${subagentPaths[index]}`);
+  assertPermissionContract(subagentPaths[index], subagent);
+  if (subagentPaths[index].includes("thoth-dev-")) {
+    assertIncludes(subagent, requiredDevelopmentSubagentSnippets, `OpenCode development subagent ${subagentPaths[index]}`);
+  }
 }
 
 const agentRegistry = await readFile(agentRegistryPath, "utf8");

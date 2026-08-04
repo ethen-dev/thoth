@@ -90,6 +90,18 @@ Agentes temporales usados para desarrollar T.H.O.T.H.
 
 No forman parte del comportamiento final del sistema de memoria. Viven en `agents/development/` y siguen un flujo basico inspirado en Gentle-AI: route, explore, implement, review, verify y receipt.
 
+#### Perfil de autonomia segura
+
+El pack ejecutable de OpenCode permite al orquestador delegar sin confirmación únicamente a una lista explícita de agentes propios (`thoth-archivist`, `thoth-indexer`, `thoth-scribe`, `thoth-critic` y los seis `thoth-dev-*`). En el flujo dev, router delega a explorer/implementer/scribe; implementer a reviewer/verifier/scribe; reviewer a verifier/scribe; explorer, verifier y receipt solo a scribe. Los agentes pueden ejecutar autónomamente únicamente checks whitelisted y deben devolver sus resultados.
+
+Este perfil no autoriza ejecución arbitraria ni constituye un sandbox completo: cada agente usa `bash: "*": deny` y una whitelist de comandos concretos para diagnóstico, checks locales, la CLI informativa de OpenCode y `thoth *`. Las comprobaciones whitelisted se ejecutan autónomamente cuando el usuario solicita una tarea; cualquier comando fuera de la whitelist requiere autorización explícita o está denegado. No se permiten intérpretes ni envoltorios para eludirla.
+
+Las denegaciones de lectura y edición de secretos usan patrones (`.aws`, `.npmrc`, credenciales, tokens, claves y formatos de certificados, entre otros) como defensa preventiva; no sustituyen un sandbox completo ni garantizan detectar todos los secretos.
+
+También permanecen bloqueadas o en `ask` las operaciones destructivas, secretos, `git push` no solicitado, `git reset`/`git clean`, `sudo`, red, instalaciones, `npm exec`, npx remoto, `git diff` amplio y comandos de desarrollo no whitelisted. `thoth *` se reserva para operaciones de wiki solicitadas por el orquestador.
+
+`webfetch` y `websearch` son permisos separados de `bash` y pueden seguir permitidos según el agente. La autonomía sin confirmación descrita aquí solo cubre la whitelist local de `bash`; el acceso web conserva sus propias reglas y límites.
+
 ## Flujo de Delegacion
 
 ```mermaid
