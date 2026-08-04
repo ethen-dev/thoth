@@ -290,8 +290,13 @@ program
   .command("index")
   .description("Rebuild derived wiki indexes and optionally the human index")
   .option("--human", "Also rebuild the human Markdown index.md")
-  .action(async (options: { human?: boolean }) => {
+  .option("--curated", "Use the conservative human view")
+  .option("--category-pages", "Generate exhaustive per-type human index pages")
+  .option("--type <type>", documentTypeHelp)
+  .option("--max-per-section <n>", "Limit entries in the main human index")
+  .action(async (options: { human?: boolean; curated?: boolean; categoryPages?: boolean; type?: string; maxPerSection?: string }) => {
     try {
+      validateHumanIndexOptions(options);
       const config = await loadConfig();
       const result = await rebuildWikiIndex(config);
 
@@ -309,11 +314,20 @@ program
       }
 
       if (options.human) {
-        const humanIndex = await rebuildHumanWikiIndex(config);
+        const maxPerSection = options.maxPerSection === undefined ? undefined : Number(options.maxPerSection);
+        const humanIndex = await rebuildHumanWikiIndex(config, {
+          curated: options.curated,
+          categoryPages: options.categoryPages,
+          type: options.type,
+          maxPerSection,
+        });
 
         console.log(`Human index documents: ${humanIndex.documentsIndexed}`);
         console.log(`Human index relations: ${humanIndex.relationsIndexed}`);
         console.log(`Human index: ${humanIndex.indexPath}`);
+        if (humanIndex.categoryPages?.length) {
+          console.log(`Category pages: ${humanIndex.categoryPages.join(", ")}`);
+        }
       }
     } catch (error) {
       reportError(error);
@@ -684,4 +698,30 @@ function reportError(error: unknown): never {
 
 function collectValues(value: string, previous: string[]): string[] {
   return [...previous, value];
+}
+
+function validateHumanIndexOptions(options: {
+  human?: boolean;
+  curated?: boolean;
+  categoryPages?: boolean;
+  type?: string;
+  maxPerSection?: string;
+}): void {
+  const humanOnly = options.curated || options.categoryPages || options.type !== undefined || options.maxPerSection !== undefined;
+  if (humanOnly && !options.human) {
+    throw new Error("--curated, --category-pages, --type and --max-per-section require --human");
+  }
+  if (options.type !== undefined && !(validWikiDocumentTypes as readonly string[]).includes(options.type)) {
+    throw new Error(`Invalid wiki document type: ${options.type}`);
+  }
+  if (options.maxPerSection !== undefined) {
+    if (!/^\d+$/.test(options.maxPerSection)) {
+      throw new Error("--max-per-section must be a non-negative safe integer");
+    }
+
+    const value = Number(options.maxPerSection);
+    if (!Number.isSafeInteger(value)) {
+      throw new Error("--max-per-section must be a non-negative safe integer");
+    }
+  }
 }

@@ -1,4 +1,4 @@
-import { lstat, readdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Ajv2020 } from "ajv/dist/2020.js";
@@ -277,6 +277,14 @@ export type WikiHumanIndexResult = {
   documentsIndexed: number;
   relationsIndexed: number;
   indexPath: string;
+  categoryPages?: string[];
+};
+
+export type WikiHumanIndexOptions = {
+  curated?: boolean;
+  categoryPages?: boolean;
+  type?: string;
+  maxPerSection?: number;
 };
 
 export type WikiSyncLinksResult = {
@@ -762,6 +770,11 @@ export async function rebuildWikiIndex(
   for (const markdownPath of markdownPaths) {
     const document = await readWikiDocument(config.resolvedWikiPath, markdownPath);
 
+    // Only generated category pages are views, not canonical technical documents.
+    if (isGeneratedCategoryPage(document)) {
+      continue;
+    }
+
     if (seenIds.has(document.id)) {
       warnings.push(`Duplicate document id: ${document.id}`);
     }
@@ -818,14 +831,29 @@ export async function rebuildWikiIndex(
 
 export async function rebuildHumanWikiIndex(
   config: ResolvedThothConfig,
+  options: WikiHumanIndexOptions = {},
 ): Promise<WikiHumanIndexResult> {
+  if (options.type && !validWikiDocumentTypeSet.has(options.type)) {
+    throw new Error(`Invalid wiki document type: ${options.type}`);
+  }
+  if (options.maxPerSection !== undefined &&
+      (!Number.isSafeInteger(options.maxPerSection) || options.maxPerSection < 0)) {
+    throw new Error("maxPerSection must be a non-negative safe integer");
+  }
+
   await ensureDirectory(config.resolvedWikiPath);
 
   const markdownPaths = await collectMarkdownFiles(config.resolvedWikiPath);
-  const documents = (await Promise.all(
+  const scannedDocuments = await Promise.all(
     markdownPaths.map((markdownPath) => readWikiDocument(config.resolvedWikiPath, markdownPath)),
-  ))
-    .filter((document) => !document.id.startsWith("wiki-"))
+  );
+  await removeObsoleteCategoryPages(config, scannedDocuments, options.categoryPages === true, options.type);
+  const canonicalDocuments = scannedDocuments.filter((document) => !isGeneratedArtifact(document));
+  const visibleDocuments = canonicalDocuments.filter((document) =>
+    options.curated ? !isGeneratedArtifact(document) : !document.id.startsWith("wiki-"),
+  );
+  const allDocuments = visibleDocuments
+    .filter((document) => !options.type || document.type === options.type)
     .sort((left, right) => {
       const typeOrder = humanIndexSections.findIndex((section) => section.type === left.type)
         - humanIndexSections.findIndex((section) => section.type === right.type);
@@ -837,14 +865,59 @@ export async function rebuildHumanWikiIndex(
       return left.title.localeCompare(right.title);
     });
 
+  const documents = options.maxPerSection === undefined
+    ? allDocuments
+    : allDocuments.filter((document, index, values) => {
+        const section = humanIndexSections.find((item) => item.type === document.type);
+        const sectionKey = section?.type ?? "other";
+        return values.slice(0, index).filter((item) =>
+          (humanIndexSections.find((candidate) => candidate.type === item.type)?.type ?? "other") === sectionKey,
+        ).length < options.maxPerSection!;
+      });
+
   const indexPath = path.join(config.resolvedWikiPath, "index.md");
 
-  await writeFile(indexPath, createHumanWikiIndex(documents), "utf8");
+  const categoryPagePaths: string[] = [];
+  if (options.categoryPages) {
+    const categoryTypes = [...new Set(canonicalDocuments
+      .filter((document) => !options.type || document.type === options.type)
+      .map((document) => document.type))].sort((left, right) => {
+      const leftOrder = humanIndexSections.findIndex((section) => section.type === left);
+      const rightOrder = humanIndexSections.findIndex((section) => section.type === right);
+      return (leftOrder === -1 ? 999 : leftOrder) - (rightOrder === -1 ? 999 : rightOrder) || left.localeCompare(right);
+    });
+
+    for (const type of categoryTypes) {
+      const categoryPath = `index-${type}.md`;
+      const existingDocument = scannedDocuments.find((document) => document.path === categoryPath);
+
+      if (existingDocument && !isGeneratedArtifact(existingDocument)) {
+        throw new Error(
+          `Cannot generate ${categoryPath}: a canonical document already exists at that path; refusing to overwrite it`,
+        );
+      }
+    }
+
+    for (const type of categoryTypes) {
+      const categoryDocuments = canonicalDocuments.filter((document) => document.type === type && (!options.type || document.type === options.type));
+      if (categoryDocuments.length === 0) continue;
+      const categoryPath = `index-${type}.md`;
+      await writeFile(
+        path.join(config.resolvedWikiPath, categoryPath),
+        createHumanCategoryIndex(humanIndexSections.find((section) => section.type === type)?.heading ?? `${type[0]?.toUpperCase() ?? ""}${type.slice(1)}`, type, categoryDocuments, canonicalDocuments),
+        "utf8",
+      );
+      categoryPagePaths.push(categoryPath);
+    }
+  }
+
+  await writeFile(indexPath, createHumanWikiIndex(documents, categoryPagePaths, canonicalDocuments), "utf8");
 
   return {
     documentsIndexed: documents.length,
     relationsIndexed: documents.flatMap((document) => readRelations(document.metadata.related)).length,
     indexPath: path.relative(config.resolvedWikiPath, indexPath),
+    categoryPages: categoryPagePaths,
   };
 }
 
@@ -1755,8 +1828,69 @@ Indice inicial de la LLM Wiki.
 `;
 }
 
-function createHumanWikiIndex(documents: WikiDocument[]): string {
+function isGeneratedArtifact(document: WikiDocument): boolean {
+  return document.metadata.source === "generated" || isGeneratedCategoryPage(document);
+}
+
+function isGeneratedCategoryPage(document: WikiDocument): boolean {
+  return document.metadata.source === "generated" && /^index-[^/]+\.md$/.test(document.path);
+}
+
+async function removeObsoleteCategoryPages(
+  config: ResolvedThothConfig,
+  documents: WikiDocument[],
+  keepPages: boolean,
+  typeFilter?: string,
+): Promise<void> {
+  const currentTypes = new Set(
+    documents
+      .filter((document) => !isGeneratedArtifact(document))
+      .filter((document) => !typeFilter || document.type === typeFilter)
+      .map((document) => document.type),
+  );
+  for (const document of documents) {
+    if (!isGeneratedCategoryPage(document)) continue;
+    const type = document.path.slice("index-".length, -".md".length);
+    if (!keepPages || !currentTypes.has(type)) {
+      await unlink(path.join(config.resolvedWikiPath, document.path));
+    }
+  }
+}
+
+function documentSummary(document: WikiDocument): string {
+  const summaryMatch = document.content.match(/##\s+Summary\s*\n+([\s\S]*?)(?=\n##\s|$)/i);
+  const body = summaryMatch?.[1] ?? document.content;
+  const paragraph = body.split(/\n\s*\n/).map((part) => part.replace(/^#+\s+/gm, "").trim()).find(Boolean);
+  const normalized = (paragraph ?? document.title).replace(/\s+/g, " ").trim();
+  return normalized.length > 160 ? `${normalized.slice(0, 157).trimEnd()}...` : normalized;
+}
+
+function sourceCount(document: WikiDocument, documentsById: Map<string, WikiDocument>): number {
+  if (document.type === "source") return 0;
+  const sources = new Set<string>();
+  for (const relation of readRelations(document.metadata.related)) {
+    const target = documentsById.get(relation.id);
+    if (relation.relation === "derived_from" && target?.type === "source") sources.add(target.id);
+  }
+  for (const candidate of documentsById.values()) {
+    if (candidate.type !== "source") continue;
+    if (readRelations(candidate.metadata.related).some((relation) =>
+      relation.relation === "source_for" && relation.id === document.id)) {
+      sources.add(candidate.id);
+    }
+  }
+  return sources.size;
+}
+
+function createHumanEntry(document: WikiDocument, documentsById: Map<string, WikiDocument>): string {
+  const count = sourceCount(document, documentsById);
+  const sources = count > 0 ? ` · sources: ${count}` : "";
+  return `- [${document.title}](${toPosixPath(document.path)}) — ${documentSummary(document)} · status: ${document.status}${sources}`;
+}
+
+function createHumanWikiIndex(documents: WikiDocument[], categoryPagePaths: string[] = [], graphDocuments = documents): string {
   const now = currentDate();
+  const documentsById = new Map(graphDocuments.map((document) => [document.id, document]));
   const sections = humanIndexSections
     .map((section) => {
       const items = documents.filter((document) => document.type === section.type);
@@ -1766,7 +1900,7 @@ function createHumanWikiIndex(documents: WikiDocument[]): string {
       }
 
       return `## ${section.heading}\n\n${items
-        .map((document) => `- [${document.title}](${toPosixPath(document.path)})`)
+        .map((document) => createHumanEntry(document, documentsById))
         .join("\n")}`;
     })
     .join("\n\n");
@@ -1776,9 +1910,12 @@ function createHumanWikiIndex(documents: WikiDocument[]): string {
   const otherSection = otherDocuments.length === 0
     ? "## Other\n"
     : `## Other\n\n${otherDocuments
-      .map((document) => `- [${document.title}](${toPosixPath(document.path)})`)
+      .map((document) => createHumanEntry(document, documentsById))
       .join("\n")}`;
   const relationSection = createHumanRelationSection(documents);
+  const categorySection = categoryPagePaths.length === 0
+    ? ""
+    : `\n\n## Category Pages\n\n${categoryPagePaths.map((page) => `- [${page.replace(/^index-|\.md$/g, "")}](${page})`).join("\n")}`;
 
   return `---
 id: wiki-index
@@ -1804,11 +1941,40 @@ ${sections}
 
 ${otherSection}
 
+${categorySection}
+
 ${relationSection}
 
 ## Notes
 
 Este indice se regenera con \`thoth index --human\` e incluye enlaces por tipo y mapa de relaciones declarado en frontmatter.
+`;
+}
+
+function createHumanCategoryIndex(heading: string, type: string, documents: WikiDocument[], graphDocuments = documents): string {
+  const documentsById = new Map(graphDocuments.map((document) => [document.id, document]));
+  const entries = documents.map((document) => createHumanEntry(document, documentsById)).join("\n");
+  const now = currentDate();
+  return `---
+id: wiki-index-${type}
+title: ${heading} Index
+type: reference
+status: active
+created_at: ${now}
+updated_at: ${now}
+tags:
+  - index
+source: generated
+related: []
+---
+
+# ${heading}
+
+## Summary
+
+Generated human category index. It is derived from canonical documents and is not part of the semantic graph.
+
+${entries}
 `;
 }
 

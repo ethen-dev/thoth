@@ -259,6 +259,8 @@ El indice debe permitir localizar documentos y entender relaciones generales.
 
 Inicialmente puede ser un archivo `wiki/index.md` generado o mantenido por T.H.O.T.H.
 
+`thoth index --human` mantiene esta vista separada de `.thoth/index.json` y `.thoth/relations.json`. La vista admite filtros y límites; `--category-pages` genera páginas `index-<type>.md` exhaustivas como artefactos derivados (`source: generated`), que no son documentos canónicos ni participan en el grafo semántico.
+
 Los indices derivados JSON usan `schemas/wiki-index.schema.json` y `schemas/wiki-relations-index.schema.json`.
 
 El indice puede incluir:

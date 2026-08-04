@@ -213,6 +213,182 @@ status: active
     expect(index).toContain("thoth index --human");
   });
 
+  it("supports curated human views, stable summaries, source counts, limits and category pages", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    const source = await addWikiSourceDocument(config, {
+      id: "source-curated",
+      title: "Raw source",
+      content: "Raw material",
+    });
+    const note = await captureWikiDocument(config, {
+      id: "note-curated",
+      title: "Canonical note",
+      type: "note",
+      content: "## Summary\n\nA stable summary.\n\n## Content\n\nDetails.",
+      status: "review",
+    });
+    await linkWikiSourceDocument(config, source.id, note.id);
+    await writeFile(path.join(config.resolvedWikiPath, "notes", "note-generated.md"), `---\nid: note-generated\ntitle: Generated\ntype: note\nstatus: active\nsource: generated\n---\n\nGenerated body.\n`, "utf8");
+
+    await expect(rebuildHumanWikiIndex(config, { maxPerSection: -1 })).rejects.toThrow("non-negative");
+    await expect(rebuildHumanWikiIndex(config, { maxPerSection: 1.5 })).rejects.toThrow("non-negative");
+    const result = await rebuildHumanWikiIndex(config, { curated: true, categoryPages: true, maxPerSection: 0 });
+    const index = await readFile(path.join(config.resolvedWikiPath, "index.md"), "utf8");
+    const category = await readFile(path.join(config.resolvedWikiPath, "index-note.md"), "utf8");
+    const technical = await rebuildWikiIndex(config);
+    const technicalIndex = JSON.parse(await readFile(path.join(config.resolvedWikiPath, ".thoth", "index.json"), "utf8")) as { documents: Array<{ id: string }> };
+    const second = await rebuildHumanWikiIndex(config, { curated: true, categoryPages: true, maxPerSection: 0 });
+
+    expect(result.categoryPages).toContain("index-note.md");
+    expect(index).not.toContain("Generated");
+    expect(index).not.toContain("Canonical note");
+    expect(category).toContain("Canonical note");
+    expect(category).toContain("status: review");
+    expect(category).toContain("sources: 1");
+    const filtered = await rebuildHumanWikiIndex(config, { type: "note", categoryPages: true, maxPerSection: 0 });
+    expect(filtered.documentsIndexed).toBe(0);
+    const filteredCategory = await readFile(path.join(config.resolvedWikiPath, "index-note.md"), "utf8").catch(() => "");
+    expect(filteredCategory).toContain("sources: 1");
+    await writeFile(path.join(config.resolvedWikiPath, "index-idea.md"), "---\nid: wiki-index-idea\ntype: reference\nsource: generated\n---\n", "utf8");
+    await writeFile(path.join(config.resolvedWikiPath, "index-keep.md"), "---\nid: canonical-keep\ntype: reference\nsource: manual\n---\n", "utf8");
+    await rebuildHumanWikiIndex(config);
+    await expect(readFile(path.join(config.resolvedWikiPath, "index-idea.md"))).rejects.toThrow();
+    expect(await readFile(path.join(config.resolvedWikiPath, "index-keep.md"), "utf8")).toContain("canonical-keep");
+    expect(technical.documentsIndexed).toBe(technicalIndex.documents.length);
+    expect(technicalIndex.documents.some((document) => document.id === "wiki-index-note")).toBe(false);
+    expect(second.categoryPages).toEqual(result.categoryPages);
+  });
+
+  it("always excludes generated category artifacts from the human view", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    await captureWikiDocument(config, {
+      id: "note-visible",
+      title: "Visible note",
+      type: "note",
+      content: "Canonical content.",
+    });
+    await writeFile(
+      path.join(config.resolvedWikiPath, "index-note.md"),
+      "---\nid: arbitrary-generated-id\ntitle: Generated category\ntype: reference\nstatus: active\nsource: generated\n---\n",
+      "utf8",
+    );
+
+    const result = await rebuildHumanWikiIndex(config);
+    const index = await readFile(path.join(config.resolvedWikiPath, "index.md"), "utf8");
+
+    expect(result.documentsIndexed).toBe(1);
+    expect(index).toContain("Visible note");
+    expect(index).not.toContain("Generated category");
+  });
+
+  it("excludes non-category generated artifacts from human and category indexes", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    await captureWikiDocument(config, {
+      id: "note-canonical",
+      title: "Canonical note",
+      type: "note",
+      content: "Canonical content.",
+    });
+    await writeFile(
+      path.join(config.resolvedWikiPath, "notes", "note-generated-artifact.md"),
+      "---\nid: note-generated-artifact\ntitle: Generated artifact\ntype: note\nstatus: active\nsource: generated\n---\n\nGenerated content.\n",
+      "utf8",
+    );
+
+    await rebuildHumanWikiIndex(config, { categoryPages: true });
+    const index = await readFile(path.join(config.resolvedWikiPath, "index.md"), "utf8");
+    const category = await readFile(path.join(config.resolvedWikiPath, "index-note.md"), "utf8");
+
+    expect(index).toContain("Canonical note");
+    expect(index).not.toContain("Generated artifact");
+    expect(category).toContain("Canonical note");
+    expect(category).not.toContain("Generated artifact");
+  });
+
+  it("refuses to overwrite a canonical category path", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    await captureWikiDocument(config, {
+      id: "note-canonical",
+      title: "Canonical note",
+      type: "note",
+      content: "Canonical content.",
+    });
+    const canonicalIndex = "---\nid: manual-index-note\ntitle: Manual note index\ntype: reference\nstatus: active\nsource: manual\n---\n\n# Protected content\n";
+    const categoryPath = path.join(config.resolvedWikiPath, "index-note.md");
+    await writeFile(categoryPath, canonicalIndex, "utf8");
+
+    await expect(rebuildHumanWikiIndex(config, { categoryPages: true })).rejects.toThrow(
+      "refusing to overwrite it",
+    );
+    expect(await readFile(categoryPath, "utf8")).toBe(canonicalIndex);
+  });
+
+  it("rejects unsafe human index limits before changing indexes", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    const indexPath = path.join(config.resolvedWikiPath, "index.md");
+    const before = await readFile(indexPath, "utf8");
+
+    for (const maxPerSection of [Number.MAX_SAFE_INTEGER + 1, Infinity, 1.5, -1]) {
+      await expect(rebuildHumanWikiIndex(config, { maxPerSection })).rejects.toThrow("safe integer");
+    }
+
+    expect(await readFile(indexPath, "utf8")).toBe(before);
+  });
+
+  it("cleans generated categories according to a type filter without deleting canonical pages", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    await captureWikiDocument(config, { id: "note-one", title: "One", type: "note", content: "One" });
+    await writeFile(path.join(config.resolvedWikiPath, "index-note.md"), `---\nid: wiki-index-note\ntype: reference\nsource: generated\n---\n`, "utf8");
+    await writeFile(path.join(config.resolvedWikiPath, "index-idea.md"), `---\nid: wiki-index-idea\ntype: reference\nsource: generated\n---\n`, "utf8");
+    await writeFile(path.join(config.resolvedWikiPath, "index-note-canonical.md"), `---\nid: wiki-index-note-canonical\ntype: reference\nsource: manual\n---\n`, "utf8");
+
+    await rebuildHumanWikiIndex(config, { categoryPages: true, type: "note" });
+
+    await expect(readFile(path.join(config.resolvedWikiPath, "index-idea.md"))).rejects.toThrow();
+    expect(await readFile(path.join(config.resolvedWikiPath, "index-note.md"), "utf8")).toContain("Notes");
+    expect(await readFile(path.join(config.resolvedWikiPath, "index-note-canonical.md"), "utf8")).toContain("wiki-index-note-canonical");
+  });
+
+  it("keeps manual wiki-index documents in the technical index and excludes generated category pages", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    await writeFile(path.join(config.resolvedWikiPath, "manual.md"), `---\nid: wiki-index-manual\ntitle: Manual Index\ntype: reference\nstatus: active\nsource: manual\n---\n\n# Manual\n`, "utf8");
+    await writeFile(path.join(config.resolvedWikiPath, "index-note.md"), `---\nid: arbitrary-id\ntitle: Generated Notes\ntype: reference\nstatus: active\nsource: generated\n---\n`, "utf8");
+
+    const result = await rebuildWikiIndex(config);
+    const technical = JSON.parse(await readFile(path.join(config.resolvedWikiPath, ".thoth", "index.json"), "utf8")) as { documents: Array<{ id: string }> };
+
+    expect(result.documentsIndexed).toBe(technical.documents.length);
+    expect(technical.documents.some((document) => document.id === "wiki-index-manual")).toBe(true);
+    expect(technical.documents.some((document) => document.id === "arbitrary-id")).toBe(false);
+  });
+
+  it("does not count a source document as its own source", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    const source = await addWikiSourceDocument(config, { id: "source-self", title: "Self source", content: "Raw" });
+    await relateWikiDocuments(config, { sourceId: source.id, targetId: source.id, relation: "source_for" }).catch(() => undefined);
+    await rebuildHumanWikiIndex(config, { categoryPages: true });
+    const category = await readFile(path.join(config.resolvedWikiPath, "index-source.md"), "utf8");
+
+    expect(category).toContain("Self source");
+    expect(category).not.toContain("sources: 1");
+  });
+
   it("gets a wiki document by id", async () => {
     const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
     const config = await loadConfig(workspacePath);

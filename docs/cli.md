@@ -222,6 +222,8 @@ Ejemplo:
 
 ```bash
 thoth index
+thoth index --human --curated --category-pages
+thoth index --human --type decision --max-per-section 10
 ```
 
 Responsabilidades:
@@ -233,6 +235,17 @@ Responsabilidades:
 - generar `.thoth/index.json`
 - generar `.thoth/relations.json`
 - advertir sobre relaciones rotas o IDs duplicados
+
+Con `--human` se genera además una vista navegable en `wiki/index.md`. Sus opciones son:
+
+- `--curated`: excluye artefactos generados y conserva únicamente documentos canónicos.
+- `--type <type>`: limita la vista humana a un tipo válido.
+- `--max-per-section <n>`: limita cada sección del índice principal a un entero no negativo.
+- `--category-pages`: crea páginas `index-<type>.md` exhaustivas y las enlaza desde el índice principal. Estas páginas son derivadas, idempotentes y no entran en los índices técnicos.
+
+Estas opciones requieren `--human`; la CLI valida el tipo y que `--max-per-section` sea literalmente un entero no negativo antes de reconstruir cualquier índice. Al filtrar por tipo, también se eliminan las páginas de categoría generadas que quedan fuera de la salida, pero nunca archivos canónicos.
+
+Cada entrada humana incluye un resumen estable de una línea, su estado y, cuando existen relaciones válidas de fuentes, el número de fuentes únicas. Las relaciones se leen exclusivamente del frontmatter; las relaciones rotas no cuentan como fuentes.
 
 ### thoth lint
 
