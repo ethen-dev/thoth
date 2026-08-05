@@ -82,6 +82,8 @@ permission:
     "npx*": ask
     "npm exec*": ask
     "npm exec -- thoth*": allow
+    "npm link*": deny
+    "npm link": ask
     "npm install*": ask
     "pip install*": ask
     "*;*": deny

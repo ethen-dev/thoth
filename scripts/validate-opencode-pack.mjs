@@ -303,6 +303,9 @@ function assertPermissionContract(path, content) {
   if (bash["npm exec*"] !== "ask" || bash["npm exec -- thoth*"] !== "allow") {
     throw new Error(`${path} must ask for generic npm exec and allow only npm exec -- thoth*`);
   }
+  if (bash["npm link*"] !== "deny" || bash["npm link"] !== "ask") {
+    throw new Error(`${path} must ask only for bare npm link and deny external npm link targets`);
+  }
   const execOrder = Object.keys(bash);
   if (execOrder.indexOf("npm exec -- thoth*") <= execOrder.indexOf("npm exec*")) {
     throw new Error(`${path} must place npm exec -- thoth* after generic npm exec`);
