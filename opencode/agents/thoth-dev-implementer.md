@@ -104,6 +104,8 @@ permission:
     "curl*": ask
     "wget*": ask
     "npx*": ask
+    "npm exec*": ask
+    "npm exec -- thoth*": allow
     "npm install*": ask
     "pip install*": ask
     "*;*": deny

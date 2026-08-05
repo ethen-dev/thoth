@@ -78,6 +78,8 @@ const requiredAgentSnippets = [
   "npm test*",
   "npm run typecheck*",
   "npm run opencode:validate*",
+  "npm exec*",
+  "npm exec -- thoth*",
   "git diff --check*",
   "git diff --stat*",
   "npm pack --dry-run*",
@@ -132,6 +134,7 @@ const requiredDevelopmentSubagentSnippets = [
   "npm test*",
   "npm run typecheck*",
   "npm run opencode:validate*",
+  "npm exec -- thoth*",
   "npm pack --dry-run*",
   "opencode --version",
   "thoth *",
@@ -157,6 +160,7 @@ const safeBashAllows = new Set([
   "npm run typecheck*",
   "npm run build*",
   "npm run opencode:validate*",
+  "npm exec -- thoth*",
   "npm pack --dry-run*",
   "opencode --version",
   "opencode --help",
@@ -295,6 +299,13 @@ function assertPermissionContract(path, content) {
     if (bash[command] !== "deny") {
       throw new Error(`${path} must deny: ${command}`);
     }
+  }
+  if (bash["npm exec*"] !== "ask" || bash["npm exec -- thoth*"] !== "allow") {
+    throw new Error(`${path} must ask for generic npm exec and allow only npm exec -- thoth*`);
+  }
+  const execOrder = Object.keys(bash);
+  if (execOrder.indexOf("npm exec -- thoth*") <= execOrder.indexOf("npm exec*")) {
+    throw new Error(`${path} must place npm exec -- thoth* after generic npm exec`);
   }
   if (path.endsWith("thoth-memory.md")) {
     for (const command of ["git add*", "git commit*", "git push*"]) {

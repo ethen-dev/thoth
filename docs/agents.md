@@ -98,7 +98,7 @@ Este perfil no autoriza ejecución arbitraria ni constituye un sandbox completo:
 
 Las denegaciones de lectura y edición de secretos usan patrones (`.aws`, `.npmrc`, credenciales, tokens, claves y formatos de certificados, entre otros) como defensa preventiva; no sustituyen un sandbox completo ni garantizan detectar todos los secretos.
 
-También permanecen bloqueadas o en `ask` las operaciones destructivas generales, secretos, `sudo`, red, instalaciones, `npm exec`, npx remoto, `git diff` amplio y comandos de desarrollo no whitelisted.
+También permanecen bloqueadas o en `ask` las operaciones destructivas generales, secretos, `sudo`, red, instalaciones, `npm exec` genérico, paquetes externos, npx remoto, `git diff` amplio y comandos de desarrollo no whitelisted. Solo `npm exec -- thoth ...` queda permitido para la CLI local del proyecto/configuración.
 
 El agente primario puede ejecutar `git add*`, `git commit*` y `git push*` únicamente tras una petición explícita del usuario o una instrucción de publicación inequívoca, nunca por iniciativa propia, y mantiene un commit por tarea. Force push (`git push --force*`/`git push -f*`), `git reset*` y `git clean*` siguen bloqueados. Los demás agentes no reciben permisos Git mutantes; el orquestador primario centraliza la publicación y `thoth *` se reserva para operaciones de wiki solicitadas por él.
 
