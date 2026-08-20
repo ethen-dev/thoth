@@ -232,6 +232,7 @@ export type WikiAppendResult = {
   id: string;
   path: string;
   section: string;
+  updated: boolean;
 };
 
 export type WikiLogInput = {
@@ -312,6 +313,34 @@ export type WikiLintResult = {
   documentsChecked: number;
   issues: WikiLintIssue[];
 };
+
+export type WikiContentBlock = {
+  heading: string;
+  content: string;
+};
+
+/** Normalize only for exact block comparisons; this is deliberately not fuzzy. */
+export function normalizeWikiBlock(value: string): string {
+  return value.normalize("NFKC").trim().replace(/\s+/gu, " ");
+}
+
+export function findDuplicateWikiBlocks(content: string): Array<[WikiContentBlock, WikiContentBlock]> {
+  const blocks = extractWikiContentBlocks(content);
+  const summaries = blocks.filter((block) => block.heading.toLowerCase() === "summary");
+  const contents = blocks.filter((block) => block.heading.toLowerCase() === "content");
+  const duplicates: Array<[WikiContentBlock, WikiContentBlock]> = [];
+
+  for (const left of summaries) {
+    if (!normalizeWikiBlock(left.content)) continue;
+    for (const right of contents) {
+      if (normalizeWikiBlock(left.content) === normalizeWikiBlock(right.content)) {
+        duplicates.push([left, right]);
+      }
+    }
+  }
+
+  return duplicates;
+}
 
 export type WikiDoctorCheck = {
   name: string;
@@ -428,6 +457,10 @@ async function captureWikiDocumentUnsafe(
   assertValidDocumentType(type);
   assertValidStatus(status);
   assertValidCaptureDocumentType(type);
+
+  if (findDuplicateWikiBlocks(input.content).length > 0) {
+    throw new Error("Capture content must not duplicate Summary and Content blocks");
+  }
 
   let projectSlug: string | undefined;
   if (type === "task") {
@@ -587,6 +620,10 @@ async function appendWikiDocumentUnsafe(
   const section = input.section ?? "Notes";
   const content = appendToSection(parsed.content, section, input.content);
 
+  if (content === parsed.content) {
+    return { id: input.id, path: located.document.path, section, updated: false };
+  }
+
   normalizeDateMetadata(metadata, config.dateFormat);
   metadata.updated_at = currentDate(config.dateFormat);
 
@@ -596,6 +633,7 @@ async function appendWikiDocumentUnsafe(
     id: input.id,
     path: located.document.path,
     section,
+    updated: true,
   };
 }
 
@@ -1160,6 +1198,15 @@ export async function lintWikiDocuments(
     }
   }
 
+  for (const document of documents) {
+    for (const [left, right] of findDuplicateWikiBlocks(document.content)) {
+      issues.push({
+        path: document.path,
+        message: `Duplicate wiki blocks: ${left.heading} and ${right.heading}`,
+      });
+    }
+  }
+
   const knownIds = new Set(ids.keys());
 
   for (const document of documents) {
@@ -1369,8 +1416,37 @@ function normalizeSchemaValue(value: unknown): unknown {
   return value;
 }
 
+function extractWikiContentBlocks(content: string): WikiContentBlock[] {
+  const lines = content.split("\n");
+  const headings: Array<{ heading: string; start: number; endOfLine: number }> = [];
+  let offset = 0;
+  let fence: string | undefined;
+
+  for (const line of lines) {
+    const fenceMatch = /^\s*(`{3,}|~{3,})/.exec(line);
+    if (fenceMatch) {
+      const marker = fenceMatch[1]?.[0];
+      if (!fence && marker) fence = marker;
+      else if (fence === marker) fence = undefined;
+    } else if (!fence) {
+      const heading = /^##\s+(.+?)\s*$/.exec(line);
+      if (heading) headings.push({ heading: heading[1]?.trim() ?? "", start: offset, endOfLine: offset + line.length });
+    }
+    offset += line.length + 1;
+  }
+
+  return headings.map((heading, index) => ({
+    heading: heading.heading,
+    content: content.slice(heading.endOfLine, headings[index + 1]?.start ?? content.length).trim(),
+  }));
+}
+
 function appendToSection(content: string, section: string, addition: string): string {
   const normalizedAddition = addition.trim();
+  if (!normalizedAddition || extractWikiContentBlocks(content).some((block) =>
+    normalizeWikiBlock(normalizedAddition) === normalizeWikiBlock(block.content))) {
+    return content;
+  }
   const escapedSection = escapeRegExp(section);
   const heading = new RegExp(`(^|\\n)## ${escapedSection}\\s*\\n`, "m");
   const match = heading.exec(content);
@@ -1570,6 +1646,10 @@ function createWikiDocumentMarkdown(input: {
   const tags = input.tags.length > 0
     ? `\n${input.tags.map((tag) => `  - ${yamlString(tag)}`).join("\n")}`
     : " []";
+  const summary = createWikiSummary(input.content);
+  const summaryBlock = summary
+    ? `\n## Summary\n\n${summary}\n`
+    : "";
 
   return `---
 id: ${yamlString(input.id)}
@@ -1584,15 +1664,21 @@ related:${input.related.length === 0 ? " []" : `\n${input.related.map((relation)
 ---
 
 # ${input.title}
-
-## Summary
-
-${input.content}
+${summaryBlock}
 
 ## Content
 
-${input.content}
+${input.content.trim()}
 `;
+}
+
+function createWikiSummary(content: string): string {
+  const trimmed = content.trim();
+  const firstParagraph = trimmed.split(/\n\s*\n/u)[0]?.trim() ?? "";
+  const summary = firstParagraph.length > 160
+    ? `${firstParagraph.slice(0, 157).trimEnd()}...`
+    : firstParagraph;
+  return normalizeWikiBlock(summary) === normalizeWikiBlock(trimmed) ? "" : summary;
 }
 
 function createWikiSourceMarkdown(input: {

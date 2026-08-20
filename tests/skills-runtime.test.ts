@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { discoverSkills, runSkill, validateSkills } from "../src/skills/index.js";
 import { initializeWiki } from "../src/wiki/index.js";
+import { listAuditEvents, verifyAudit } from "../src/audit/index.js";
 
 async function config() {
   const workspacePath = await mkdtemp(path.join(os.tmpdir(), "thoth-skills-"));
@@ -16,15 +17,16 @@ describe("skill runtime", () => {
   it("discovers the integrated pack and executes query without writing", async () => {
     const current = await config();
     await writeFile(path.join(current.resolvedWikiPath, "match.md"), "---\nid: match\ntitle: Match\ntype: note\nstatus: active\ntags: [test]\n---\nA real matching phrase.\n", "utf8");
-    const before = await readFile(current.wikiPath).catch(() => Buffer.from("missing"));
+    const before = await readFile(path.join(current.resolvedWikiPath, "match.md"));
     const skills = await discoverSkills(current);
     expect(skills.map((skill) => skill.id)).toContain("wiki-query");
+    expect(skills.find((skill) => skill.id === "wiki-query")?.primary_agent).toBe("librarian");
     const result = await runSkill(current, { skillId: "wiki-query", input: { query: "real matching phrase" }, mode: "execute" });
     expect(result).toMatchObject({ ok: true, readOnly: true, status: "executed" });
     expect(JSON.stringify(result)).not.toMatch(/"content"|"raw"|"metadata"/);
     const first = (result.data as { results: Array<Record<string, unknown>> }).results[0];
     if (first) expect(Object.keys(first).sort()).toEqual(["id", "path", "snippet", "status", "tags", "title", "type"]);
-    expect(await readFile(current.wikiPath).catch(() => Buffer.from("missing"))).toEqual(before);
+    expect(await readFile(path.join(current.resolvedWikiPath, "match.md"))).toEqual(before);
     await rm(current.workspacePath, { recursive: true, force: true });
   });
 
@@ -109,18 +111,22 @@ describe("skill runtime", () => {
     const current = await config();
     await initializeWiki(current);
     const before = await listFiles(current.resolvedWikiPath);
+    const target = path.join(current.resolvedWikiPath, "notes", "note-safe.md");
     const provider = { complete: (request: { documentation: string }) => {
       expect(request.documentation).toContain("Markdown");
       return { version: 1, summary: "capture", actions: [{ intent: "capture", input: { id: "note-safe", title: "Safe", type: "note", content: "$(touch owned)" } }] };
     } };
     expect(await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "dry-run", confirmed: true }, provider)).toMatchObject({ ok: true, mode: "dry-run" });
     expect(await listFiles(current.resolvedWikiPath)).toEqual(before);
+    expect(await readFile(target).catch(() => undefined)).toBeUndefined();
     const proposal = await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "plan" }, provider);
     const token = (proposal.data as { confirmationToken: string }).confirmationToken;
     expect(await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "execute" }, provider)).toMatchObject({ ok: true, error: { code: "confirmation_required" } });
     expect(await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "execute", confirmed: true }, provider)).toMatchObject({ ok: false, error: { code: "confirmation_token_required" } });
     expect(await runSkill(current, { skillId: "wiki-ingest", input: {}, mode: "execute", confirmed: true, confirmationToken: token }, provider)).toMatchObject({ ok: true, status: "executed" });
     expect(await readFile(path.join(current.resolvedWikiPath, "notes", "note-safe.md"), "utf8")).toContain("$(touch owned)");
+    expect((await verifyAudit(current)).valid).toBe(true);
+    expect((await listAuditEvents(current)).some((event) => event.operation === "skill.wiki-ingest.execute")).toBe(true);
     await rm(current.workspacePath, { recursive: true, force: true });
   });
 

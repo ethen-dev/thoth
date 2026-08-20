@@ -21,6 +21,8 @@ import {
   searchWikiDocuments,
   syncWikiRelationLinks,
   updateWikiDocument,
+  findDuplicateWikiBlocks,
+  normalizeWikiBlock,
   validLogKinds,
   validWikiRelationTypes,
 } from "../src/wiki/index.js";
@@ -473,6 +475,57 @@ Visible content.
     expect(document?.tags).toEqual(["memory", "test"]);
   });
 
+  it("does not generate identical Summary and Content blocks", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+
+    const captured = await captureWikiDocument(config, {
+      content: "A durable capture.\n\nAdditional local detail.", title: "Non-duplicated capture", type: "note",
+    });
+    const document = await getWikiDocumentById(config, captured.id);
+
+    expect(document?.content).toContain("## Content");
+    expect(document?.content).toContain("## Summary\n\nA durable capture.");
+    expect(findDuplicateWikiBlocks(document?.content ?? [])).toEqual([]);
+  });
+
+  it("normalizes exact block equality without fuzzy or substring matches", () => {
+    expect(normalizeWikiBlock("  Café\n  con espacios ")).toBe("Café con espacios");
+    expect(findDuplicateWikiBlocks("## Summary\n\nCafé\n\n## Content\n\n Cafe ")).toEqual([]);
+    expect(findDuplicateWikiBlocks("## Summary\n\nCafe\n\n## Content\n\nCafe\n")).toHaveLength(1);
+    expect(findDuplicateWikiBlocks("## Summary\n\nwhole text\n\n## Content\n\ntext")).toEqual([]);
+    expect(findDuplicateWikiBlocks("## Notes\n\nSame\n\n## Notes\n\nSame\n\n## Summary\n\nSame\n\n```md\n## Content\n\nSame\n```\n\n## Content\n\nDifferent")).toEqual([]);
+    expect(findDuplicateWikiBlocks("```md\n## Content\n\nSame\n```\n\n## Summary\n\nSame\n\n## Content\n\nSame")).toHaveLength(1);
+  });
+
+  it("rejects duplicate Summary/Content input without writing", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    await expect(captureWikiDocument(config, {
+      id: "note-rejected-duplicate", title: "Rejected", type: "note",
+      content: "## Summary\n\nSame\n\n## Content\n\nSame",
+    })).rejects.toThrow("must not duplicate");
+    await expect(readFile(path.join(config.resolvedWikiPath, "notes", "note-rejected-duplicate.md"))).rejects.toThrow();
+  });
+
+  it("reports existing duplicate blocks deterministically and does not migrate them", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    const duplicate = path.join(config.resolvedWikiPath, "notes", "note-duplicate.md");
+    const raw = `---\nid: note-duplicate\ntitle: Duplicate\ntype: note\nstatus: active\n---\n\n# Duplicate\n\n## Summary\n\nSame  text.\n\n## Content\n\nSame text.\n`;
+    await writeFile(duplicate, raw, "utf8");
+
+    const lint = await lintWikiDocuments(config);
+    expect(lint.issues).toContainEqual({
+      path: "notes/note-duplicate.md",
+      message: "Duplicate wiki blocks: Summary and Content",
+    });
+    expect(await readFile(duplicate, "utf8")).toBe(raw);
+  });
+
   it("captures project tasks under the project task directory and indexes Tasks", async () => {
     const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
     const config = await loadConfig(workspacePath);
@@ -609,9 +662,41 @@ Visible content.
     const document = await getWikiDocumentById(config, captured.id);
 
     expect(result.section).toBe("Notes");
+    expect(result.updated).toBe(true);
     expect(document?.content).toContain("Original body.");
     expect(document?.content).toContain("## Notes\n\nAppended note.");
     expect(document?.metadata.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("does not append a block that already exists after normalization", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    const captured = await captureWikiDocument(config, {
+      content: "Original body.", title: "Append once", type: "note",
+    });
+
+    const result = await appendWikiDocument(config, { id: captured.id, section: "Notes", content: "Original   body." });
+    const document = await getWikiDocumentById(config, captured.id);
+
+    expect(document?.content.match(/Original\s+body\./g)).toHaveLength(1);
+    expect(document?.content).not.toContain("## Notes");
+    expect(result.updated).toBe(false);
+  });
+
+  it("preserves local source content during metadata updates", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    const source = await addWikiSourceDocument(config, {
+      id: "source-local", title: "Local source", content: "Raw local material.",
+    });
+    const before = await getWikiDocumentById(config, source.id);
+    await updateWikiDocument(config, { id: source.id, title: "Renamed source", status: "captured" });
+    const after = await getWikiDocumentById(config, source.id);
+
+    expect(after?.content).toBe(before?.content);
+    expect(after?.content).toContain("## Raw Source\n\nRaw local material.");
   });
 
   it("initializes a global log.md with generated frontmatter", async () => {

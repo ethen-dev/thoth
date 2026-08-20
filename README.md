@@ -168,6 +168,11 @@ default. API/tests can run them safely with `plan`, `dry-run` or confirmed
 contract but do not select implicit providers. The runtime never executes
 shell, Markdown, or an implicit provider.
 
+Skill invocations support `validate`, `plan`, `dry-run` and `execute`; `input` is
+an optional object. A confirmed mutation requires the exact `confirmationToken`
+returned by the reviewed proposal. Optional Markdown frontmatter metadata such
+as `primary_agent` is preserved in the runtime manifest.
+
 ```bash
 thoth skills run wiki-ingest --mode plan --input '{"content":"..."}'
 thoth skills run wiki-ingest --mode dry-run --input '{"content":"..."}'

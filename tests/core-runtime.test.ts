@@ -36,6 +36,10 @@ describe("structured Core runtime", () => {
       const input = intent === "update" ? { id: "note-fact", title: "Changed" } : { id: "note-fact", content: "more" };
       const proposal = await executePlan(config, planIntent(config, { intent, input }));
       expect(proposal.error?.code).toBe("confirmation_required");
+      if (intent === "append") {
+        const executed = await executePlan(config, planIntent(config, { intent, input }), { confirmed: true });
+        expect(executed.results?.[0]).toMatchObject({ updated: true, section: "Notes" });
+      }
     }
   });
 

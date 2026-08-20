@@ -65,8 +65,9 @@ Las APIs conceptuales como `capture_knowledge`, `query_knowledge`,
 
 The MCP server exposes `skill_list`, `skill_show`, `skill_validate`, and
 `skill_run`, backed by the same runtime as the CLI. `skill_run` accepts
-`skillId`, `input`, `mode` (`validate`, `plan`, `dry-run` or `execute`) and
-optional `confirmed`. LLM skills require a provider injected through the API;
+`skillId`, optional object `input`, `mode` (`validate`, `plan`, `dry-run` or
+`execute`), optional `confirmed`, and `confirmationToken`. LLM skills require a
+provider injected through the API;
 CLI/MCP expose the contract but do not discover one. The adapter is trusted,
 not a sandbox. Shell, Markdown bodies, and implicit providers are never run.
 

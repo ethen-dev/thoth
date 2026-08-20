@@ -42,7 +42,7 @@ export async function discoverSkills(config: SkillRuntimeConfig, limits: Partial
     if (Object.keys(parsed.data).length === 0) continue;
     const result = manifestSchema.safeParse(parsed.data);
     if (!result.success) throw new Error(`Invalid skill metadata in ${file}: ${result.error.issues.map((i) => i.path.join(".") + " " + i.message).join(", ")}`);
-    const manifest: SkillManifest = { id: result.data.id, name: result.data.name, version: result.data.version, category: result.data.category, status: result.data.status, path: publicPath(config, file) };
+    const manifest: SkillManifest = { id: result.data.id, name: result.data.name, version: result.data.version, category: result.data.category, status: result.data.status, ...(result.data.primary_agent ? { primary_agent: result.data.primary_agent } : {}), path: publicPath(config, file) };
     const previous = ids.get(manifest.id);
     if (previous) throw new Error(`Duplicate skill id: ${manifest.id} (${previous}, ${file})`);
     ids.set(manifest.id, file);

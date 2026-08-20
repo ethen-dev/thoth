@@ -346,7 +346,7 @@ export function createThothMcpServer(): McpServer {
     return jsonResult(manifest);
   });
   server.registerTool("skill_validate", { title: "Validate Skills", description: "Validate skill manifests.", annotations: { readOnlyHint: true, idempotentHint: true } }, async () => jsonResult(await validateSkills(await loadConfig())));
-  server.registerTool("skill_run", { title: "Run Skill", description: "Run a skill without executing shell, Markdown, or implicit providers. Trusted adapters are injected through the API.", inputSchema: { skillId: z.string().min(1), input: z.record(z.string(), z.unknown()).optional(), mode: z.enum(["validate", "plan", "dry-run", "execute"]).default("execute"), confirmed: z.boolean().optional(), confirmationToken: z.string().optional() }, annotations: { readOnlyHint: false } }, async (input) => jsonResult(await runSkill(await loadConfig(), input)));
+   server.registerTool("skill_run", { title: "Run Skill", description: "Run a skill without executing shell, Markdown, or implicit providers. Trusted adapters are injected through the API.", inputSchema: { skillId: z.string().min(1), input: z.record(z.string(), z.unknown()).optional(), mode: z.enum(["validate", "plan", "dry-run", "execute"]).default("execute"), confirmed: z.boolean().optional(), confirmationToken: z.string().min(1).optional() }, annotations: { readOnlyHint: false } }, async (input) => jsonResult(await runSkill(await loadConfig(), input)));
 
   return server;
 }

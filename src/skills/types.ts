@@ -8,6 +8,8 @@ export type SkillManifest = {
   version: string;
   category: string;
   status: SkillStatus;
+  /** Optional routing metadata accepted by Markdown frontmatter. */
+  primary_agent?: string;
   path: string;
 };
 

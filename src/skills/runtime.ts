@@ -9,6 +9,13 @@ import { recordAudit } from "../audit/index.js";
 const emptyFilter = z.preprocess((value) => value === "" ? undefined : value, z.string().min(1).optional());
 const querySchema = z.object({ query: z.string().trim().min(1).max(500), type: emptyFilter, status: emptyFilter, tag: emptyFilter, limit: z.number().int().min(1).max(20).default(20) }).strict();
 const lintSchema = z.object({}).strict();
+const invocationSchema = z.object({
+  skillId: z.string().min(1),
+  mode: z.enum(["validate", "plan", "dry-run", "execute"]),
+  input: z.record(z.string(), z.unknown()).optional(),
+  confirmed: z.boolean().optional(),
+  confirmationToken: z.string().min(1).optional(),
+}).strict();
 const queryInput = (value: unknown) => querySchema.parse(value);
 const llmSkills = new Set(["wiki-ingest", "wiki-crystallize", "wiki-integrate", "wiki-config"]);
 const skillActions: Record<string, Set<string>> = {
@@ -29,13 +36,15 @@ const proposalSchema = z.object({
 
 export async function runSkill(config: SkillRuntimeConfig, invocation: SkillInvocation, provider?: SkillProviderAdapter): Promise<SkillResult> {
   const started = Date.now();
-  const result = await runSkillInternal(config, invocation, provider);
+  const checked = invocationSchema.safeParse(invocation);
+  const result = checked.success
+    ? await runSkillInternal(config, checked.data, provider)
+    : failure(invalidInvocationSkillId(invocation), invalidInvocationCode(invocation), invalidInvocationMessage(invocation, checked.error), invalidInvocationMode(invocation));
   await recordAudit(config, { operation: `skill.${invocation?.skillId ?? "unknown"}.${invocation?.mode ?? "error"}`, surface: "skill", actor: config.audit?.actor ?? "system", result: result.ok ? (invocation.mode === "plan" ? "planned" : invocation.mode === "execute" && !result.readOnly ? "executed" : "proposed") : (result.error?.code === "confirmation_required" ? "proposed" : "error"), affectedIds: invocation?.skillId ? [invocation.skillId] : [], durationMs: Date.now() - started, error: result.error ? { code: result.error.code, message: result.error.message } : undefined });
   return result;
 }
 
 async function runSkillInternal(config: SkillRuntimeConfig, invocation: SkillInvocation, provider?: SkillProviderAdapter): Promise<SkillResult> {
-  if (!invocation || !["validate", "plan", "dry-run", "execute"].includes(invocation.mode)) return failure(String(invocation?.skillId ?? ""), "invalid_mode", "mode must be validate, plan, dry-run or execute", "execute");
   let skill;
   try {
     skill = await getSkill(config, invocation.skillId);
@@ -120,4 +129,23 @@ function normalizeSnippet(value: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function invalidInvocationSkillId(value: unknown): string {
+  return value && typeof value === "object" && typeof (value as Record<string, unknown>).skillId === "string" ? (value as Record<string, unknown>).skillId as string : "";
+}
+
+function invalidInvocationMode(value: unknown): SkillInvocation["mode"] {
+  return value && typeof value === "object" && ["validate", "plan", "dry-run", "execute"].includes((value as Record<string, unknown>).mode as string)
+    ? (value as Record<string, unknown>).mode as SkillInvocation["mode"]
+    : "execute";
+}
+
+function invalidInvocationCode(value: unknown): string {
+  return value && typeof value === "object" && !["validate", "plan", "dry-run", "execute"].includes((value as Record<string, unknown>).mode as string) ? "invalid_mode" : "invalid_input";
+}
+
+function invalidInvocationMessage(value: unknown, error: z.ZodError): string {
+  if (invalidInvocationCode(value) === "invalid_mode") return "mode must be validate, plan, dry-run or execute";
+  return `Invalid skill invocation: ${error.issues.map((issue) => issue.path.join(".") + " " + issue.message).join(", ")}`;
 }
