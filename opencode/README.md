@@ -48,7 +48,7 @@ The first installer creates:
 
 It also installs dependencies, builds T.H.O.T.H., and installs the `thoth` command globally from the local repository.
 
-On macOS and Linux, if npm cannot write to the system global package folder, the installer uses a user-owned prefix at `~/.npm-global` instead of requiring `sudo`. If a new Terminal cannot find `thoth` afterward, add this to your shell profile:
+On macOS and Linux, if npm cannot write to the system global package folder, the installer uses a user-owned prefix at `~/.npm-global` instead of requiring `sudo`, and adds the following line to `~/.zshrc` (macOS) or `~/.bashrc` (Linux/bash), without overwriting the profile or duplicating the line. A custom `NPM_CONFIG_PREFIX` is persisted there as both the prefix and its `bin` directory in `PATH`.
 
 ```sh
 export PATH="$HOME/.npm-global/bin:$PATH"

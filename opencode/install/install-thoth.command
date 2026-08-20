@@ -25,7 +25,7 @@ run() {
 }
 
 configure_npm_global_install() {
-  local npm_root npm_root_parent user_prefix
+  local npm_root npm_root_parent user_prefix profile prefix_line path_line line profile_changed
   npm_root="$(npm root -g 2>/dev/null || true)"
 
   if [[ -n "$npm_root" ]]; then
@@ -39,6 +39,30 @@ configure_npm_global_install() {
   export NPM_CONFIG_PREFIX="$user_prefix"
   export PATH="$user_prefix/bin:$PATH"
   mkdir -p "$user_prefix"
+  profile="$HOME/.zshrc"
+  prefix_line=""
+  if [[ "$user_prefix" == "$HOME/.npm-global" ]]; then
+    path_line='export PATH="$HOME/.npm-global/bin:$PATH"'
+  else
+    prefix_line="export NPM_CONFIG_PREFIX=$(printf '%q' "$user_prefix")"
+    path_line="export PATH=$(printf '%q' "$user_prefix/bin"):\$PATH"
+  fi
+  if [[ ! -e "$profile" ]]; then
+    touch "$profile"
+  fi
+  profile_changed="no"
+  for line in "$prefix_line" "$path_line"; do
+    if [[ -n "$line" ]] && ! grep -Fqx -- "$line" "$profile"; then
+      if [[ -s "$profile" ]]; then
+        printf '\n' >> "$profile"
+      fi
+      printf '%s\n' "$line" >> "$profile"
+      profile_changed="yes"
+    fi
+  done
+  if [[ "$profile_changed" == "yes" ]]; then
+    say "Added npm global settings to $profile"
+  fi
   say "Using user npm global prefix: $user_prefix"
 }
 
@@ -86,5 +110,5 @@ fi
 say "T.H.O.T.H. installation finished."
 say "OpenCode can use this workspace: $WORKSPACE_DIR"
 if [[ "${NPM_CONFIG_PREFIX:-}" == "$HOME/.npm-global" ]]; then
-  say "If a new Terminal cannot find thoth, add this to your shell profile: export PATH=\"$HOME/.npm-global/bin:\$PATH\""
+  say "npm global bin is configured in ~/.zshrc. Restart Terminal or run: source ~/.zshrc"
 fi
