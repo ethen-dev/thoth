@@ -31,6 +31,14 @@ escrituras ya migradas al Core.
 - `thoth doctor`: comprueba configuración, estructura, lint, índices y
   versiones CLI/MCP.
 
+`thoth status` es un snapshot rápido, consistente y read-only: incluye la
+configuración activa, ruta absoluta y existencia de la wiki, validez básica de
+`index.md`, `.thoth/index.json` y `.thoth/relations.json`, conteos derivados,
+directorios ausentes, auditoría resumida sin datos sensibles y versión.
+Devuelve código 0 si está disponible y 1 si faltan recursos o hay problemas.
+No regenera, repara ni hace diagnóstico profundo; esa función corresponde a
+`doctor`.
+
 ### Documentos
 
 - `thoth list [--type <type>] [--status <status>] [--tag <tag>]`

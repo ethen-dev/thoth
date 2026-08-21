@@ -23,9 +23,6 @@ export type AuditConfig = {
 
 export const supportedDateFormats = [
   "YYYY-MM-DD",
-  "DD/MM/YYYY",
-  "MM/DD/YYYY",
-  "YYYY/MM/DD",
 ] as const;
 export type DateFormat = (typeof supportedDateFormats)[number];
 
@@ -49,9 +46,10 @@ const defaultConfig: ThothConfig = {
 };
 
 export function resolveDateFormat(value: unknown): DateFormat {
-  return typeof value === "string" && (supportedDateFormats as readonly string[]).includes(value)
-    ? value as DateFormat
-    : defaultConfig.dateFormat as DateFormat;
+  if (typeof value !== "string" || !(supportedDateFormats as readonly string[]).includes(value)) {
+    throw new Error("Invalid dateFormat: only YYYY-MM-DD is supported");
+  }
+  return value as DateFormat;
 }
 
 export async function loadConfig(
@@ -61,7 +59,7 @@ export async function loadConfig(
   const resolvedWorkspacePath = path.dirname(configPath);
   const rawConfig = await readFile(configPath, "utf8");
   const parsedConfig = parseConfigSource(rawConfig);
-  const config: ThothConfig = { ...defaultConfig, ...parsedConfig, audit: { ...defaultConfig.audit, ...(parsedConfig.audit ?? {}) }, dateFormat: resolveDateFormat(parsedConfig.dateFormat) };
+  const config: ThothConfig = { ...defaultConfig, ...parsedConfig, audit: { ...defaultConfig.audit, ...(parsedConfig.audit ?? {}) }, dateFormat: resolveDateFormat(parsedConfig.dateFormat ?? defaultConfig.dateFormat) };
 
   if (!config.wikiPath || typeof config.wikiPath !== "string") {
     throw new Error("Invalid thoth.config.json: wikiPath must be a string.");
@@ -78,7 +76,7 @@ export async function loadConfig(
 export async function readConfigSnapshot(config: ResolvedThothConfig): Promise<{ raw: Record<string, unknown>; effective: ThothConfig; hash: string }> {
   const source = await readFile(config.configPath, "utf8");
   const raw = parseConfigSource(source);
-  const effective = { ...defaultConfig, ...raw, audit: { ...defaultConfig.audit, ...((raw.audit ?? {}) as object) } } as ThothConfig;
+  const effective = { ...defaultConfig, ...raw, audit: { ...defaultConfig.audit, ...((raw.audit ?? {}) as object) }, dateFormat: resolveDateFormat(raw.dateFormat ?? defaultConfig.dateFormat) } as ThothConfig;
   return { raw, effective, hash: createHash("sha256").update(source).digest("hex") };
 }
 

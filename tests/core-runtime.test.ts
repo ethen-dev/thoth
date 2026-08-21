@@ -142,9 +142,33 @@ describe("structured Core runtime", () => {
           "ok": false,
         },
         "status": {
+          "audit": {
+            "enabled": true,
+            "entries": 0,
+            "exists": false,
+            "valid": true,
+          },
+          "available": false,
           "configPath": "<config>",
+          "documentCount": 0,
           "indexExists": true,
+          "indexMd": {
+            "exists": true,
+            "valid": true,
+          },
           "missingDirectories": [],
+          "relationCount": 0,
+          "relationsIndex": {
+            "exists": false,
+            "relations": 0,
+            "valid": false,
+          },
+          "technicalIndex": {
+            "documents": 0,
+            "exists": false,
+            "valid": false,
+          },
+          "version": "0.6.0",
           "wikiExists": true,
           "wikiPath": "<wiki>",
           "workspacePath": "<workspace>",
@@ -152,7 +176,7 @@ describe("structured Core runtime", () => {
       }
     `);
     const events = await listAuditEvents(config, 100);
-    expect(events.filter((event) => ["status", "doctor"].includes(event.affectedIds[0] ?? "") && event.surface === "core")).toHaveLength(4);
+    expect(events.filter((event) => ["status", "doctor"].includes(event.affectedIds[0] ?? "") && event.surface === "core")).toHaveLength(2);
   });
 
   it("relates one source document through a confirmed, idempotent Core plan", async () => {

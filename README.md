@@ -156,6 +156,10 @@ Implemented MCP tools:
 - `skill_list`, `skill_show`, `skill_validate`, `skill_run`
 - `core_plan`, `core_execute`
 
+`wiki_status` devuelve un snapshot rápido y read-only del workspace, índices,
+conteos, auditoría resumida y versión. `wiki_doctor` conserva el diagnóstico
+profundo; ninguno regenera índices, y `wiki_status` no escribe auditoría.
+
 Implemented MCP resources:
 
 - `thoth://wiki/index`
@@ -214,6 +218,10 @@ existing files, and rollback of resources created by a failed initialization.
 are not modified, rejects unknown top-level configuration fields, `audit.*`,
 nested/no-op changes, and protects the
 atomic write with a configuration hash checked under the workspace lock.
+
+The MVP accepts only `dateFormat: "YYYY-MM-DD"`. Invalid values are rejected
+before any write. Generated wiki dates are UTC date-only values; audit and lock
+timestamps are technical timestamps and may retain precision.
 
 ## Repository Map
 

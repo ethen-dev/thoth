@@ -10,7 +10,7 @@
     "defaultStatus": { "type": "string", "minLength": 1 },
     "dateFormat": {
       "type": "string",
-      "enum": ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD"]
+      "const": "YYYY-MM-DD"
     },
     "audit": {
       "type": "object",

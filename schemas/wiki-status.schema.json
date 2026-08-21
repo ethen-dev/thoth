@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thoth.local/schemas/wiki-status.schema.json",
+  "title": "T.H.O.T.H. Read-only Wiki Status",
+  "type": "object",
+  "required": ["workspacePath", "configPath", "wikiPath", "wikiExists", "indexExists", "missingDirectories", "available", "version", "indexMd", "technicalIndex", "relationsIndex", "documentCount", "relationCount", "audit"],
+  "properties": {
+    "workspacePath": { "type": "string" },
+    "configPath": { "type": "string" },
+    "wikiPath": { "type": "string" },
+    "wikiExists": { "type": "boolean" },
+    "indexExists": { "type": "boolean" },
+    "missingDirectories": { "type": "array", "items": { "type": "string" } },
+    "available": { "type": "boolean" },
+    "version": { "type": "string", "minLength": 1 },
+    "indexMd": { "$ref": "#/$defs/file" },
+    "technicalIndex": { "$ref": "#/$defs/index" },
+    "relationsIndex": { "$ref": "#/$defs/relations" },
+    "documentCount": { "type": "integer", "minimum": 0 },
+    "relationCount": { "type": "integer", "minimum": 0 },
+    "audit": { "type": "object", "additionalProperties": false, "required": ["enabled", "exists", "valid", "entries"], "properties": { "enabled": { "type": "boolean" }, "exists": { "type": "boolean" }, "valid": { "type": "boolean" }, "entries": { "type": "integer", "minimum": 0 } } }
+  },
+  "$defs": {
+    "file": { "type": "object", "additionalProperties": false, "required": ["exists", "valid"], "properties": { "exists": { "type": "boolean" }, "valid": { "type": "boolean" } } },
+    "index": { "type": "object", "additionalProperties": false, "required": ["exists", "valid", "documents"], "properties": { "exists": { "type": "boolean" }, "valid": { "type": "boolean" }, "documents": { "type": "integer", "minimum": 0 } } },
+    "relations": { "type": "object", "additionalProperties": false, "required": ["exists", "valid", "relations"], "properties": { "exists": { "type": "boolean" }, "valid": { "type": "boolean" }, "relations": { "type": "integer", "minimum": 0 } } }
+  }
+}

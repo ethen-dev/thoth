@@ -46,6 +46,7 @@ export function planIntent(_config: ResolvedThothConfig, request: IntentRequest)
 export async function planIntentAudited(config: ResolvedThothConfig, request: IntentRequest, surface: AuditSurface): Promise<ThothPlan> {
   const started = Date.now();
   const plan = planIntent(config, request);
+  if (request.intent === "status") return plan;
   await recordAudit(config, {
     operation: "core.plan",
     surface,
@@ -161,5 +162,6 @@ function isWriteStep(action: CoreAction, input: unknown): boolean {
 function coreError(code: CoreError["code"], message: string, details?: unknown): CoreError { return { code, message, ...(details === undefined ? {} : { details }) }; }
 
 async function auditCore(config: ResolvedThothConfig, result: "proposal" | "rejection" | "executed" | "error", value: CoreResult, started: number, surface: AuditSurface): Promise<void> {
+  if (value.intent === "status") return;
   await recordAudit(config, { operation: `core.${result}`, surface, actor: config.audit?.actor ?? "system", result: result === "proposal" ? "proposed" : result === "rejection" ? "rejected" : result, affectedIds: [value.intent], durationMs: Date.now() - started, error: value.error ? { code: value.error.code, message: value.error.message } : undefined });
 }

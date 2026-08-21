@@ -24,6 +24,13 @@ describe("structured audit", () => {
     expect(result.errors[0]).toContain("line 2");
   });
 
+  it("keeps technical audit timestamps precise and independent of dateFormat", async () => {
+    const config = await testConfig();
+    await recordAudit(config, { operation: "timestamp-test", surface: "core", actor: "test", result: "executed", affectedIds: [], durationMs: 1 });
+    const [event] = await listAuditEvents(config);
+    expect(event?.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  });
+
   it("rejects invalid limits before reading", async () => {
     const config = await testConfig();
     await expect(listAuditEvents(config, 0)).rejects.toThrow("between 1 and 1000");

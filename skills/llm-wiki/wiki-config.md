@@ -14,3 +14,6 @@ payload permitido es `{ "changes": { ... } }` con `defaultType`,
 `wikiPath`, `audit.*`, claves desconocidas, Markdown ni comandos. La ejecución
 requiere revisión, `confirmed=true` y el token exacto devuelto por `plan` o
 `dry-run`; esos modos son siempre read-only.
+
+`dateFormat` solo puede ser `YYYY-MM-DD`. Un valor distinto se rechaza y nunca
+se degrada al formato por defecto.

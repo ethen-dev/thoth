@@ -26,7 +26,8 @@ export async function recordAudit(config: ResolvedThothConfig, event: Omit<Audit
     const safe: AuditEvent = {
       ...event,
       id: randomUUID(),
-      timestamp: formatTimestamp(new Date(), config.dateFormat),
+      // Audit timestamps are technical event timestamps, not wiki dates.
+      timestamp: new Date().toISOString(),
       actor: redact(event.actor, config),
       affectedIds: event.affectedIds.slice(0, 50).map((id) => redact(id, config)),
       operation: redact(event.operation, config),
@@ -96,11 +97,4 @@ async function auditValidator(): Promise<ValidateFunction> {
 }
 function formatAjvErrors(errors: ErrorObject[] | null | undefined): string {
   return errors?.map((error) => `${error.instancePath || "/"} ${error.message ?? "invalid"}`).join("; ") || "schema validation failed";
-}
-function formatTimestamp(date: Date, format: string): string {
-  const yyyy = String(date.getFullYear()), mm = String(date.getMonth() + 1).padStart(2, "0"), dd = String(date.getDate()).padStart(2, "0");
-  if (format === "DD/MM/YYYY") return `${dd}/${mm}/${yyyy}`;
-  if (format === "MM/DD/YYYY") return `${mm}/${dd}/${yyyy}`;
-  if (format === "YYYY/MM/DD") return `${yyyy}/${mm}/${dd}`;
-  return `${yyyy}-${mm}-${dd}`;
 }

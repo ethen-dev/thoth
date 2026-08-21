@@ -80,7 +80,9 @@ Genial, super buena idea! Voy a guardar esto por ti.
 `dateFormat` fields through the validated proposal, confirmation-token, and
 workspace-lock flow. It does not initialize the wiki and must never initialize
 or change `wikiPath`; wiki initialization and path selection belong to the
-workspace configuration flow.
+workspace configuration flow. `dateFormat` is restricted to `YYYY-MM-DD`; never
+silently repair an invalid value. Domain dates are UTC date-only, while audit
+and lock timestamps are technical timestamps and may retain precision.
 
 ## Outputs
 

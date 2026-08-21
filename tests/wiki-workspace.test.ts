@@ -57,24 +57,16 @@ describe("wiki workspace", () => {
     );
   });
 
-  it("uses supported date formats and rejects invalid formats", async () => {
-    const formats = ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD"] as const;
-    for (const dateFormat of formats) {
-      const workspacePath = await createWorkspace({ wikiPath: "../wiki", dateFormat });
+  it("uses the MVP date format and rejects unsupported formats", async () => {
+      const workspacePath = await createWorkspace({ wikiPath: "../wiki", dateFormat: "YYYY-MM-DD" });
       const config = await loadConfig(workspacePath);
       await initializeWiki(config);
-      const note = await captureWikiDocument(config, { title: `Formatted ${dateFormat}`, content: "Body.", type: "note" });
+      const note = await captureWikiDocument(config, { title: "Formatted", content: "Body.", type: "note" });
       const raw = await readFile(path.join(config.resolvedWikiPath, note.path), "utf8");
-      const datePattern = dateFormat === "YYYY-MM-DD"
-        ? /created_at: \d{4}-\d{2}-\d{2}/
-        : dateFormat === "YYYY/MM/DD"
-          ? /created_at: \d{4}\/\d{2}\/\d{2}/
-          : /created_at: \d{2}\/\d{2}\/\d{4}/;
-      expect(raw).toMatch(datePattern);
+      expect(raw).toMatch(/created_at: \d{4}-\d{2}-\d{2}/);
       expect((await lintWikiDocuments(config)).issues).toEqual([]);
-    }
 
-    const invalidWorkspace = await createWorkspace({ wikiPath: "../wiki", dateFormat: "not-supported" });
+    const invalidWorkspace = await createWorkspace({ wikiPath: "../wiki", dateFormat: "DD/MM/YYYY" });
     await expect(loadConfig(invalidWorkspace)).rejects.toThrow(/dateFormat/);
   });
 
@@ -91,6 +83,21 @@ describe("wiki workspace", () => {
     expect(config.workspacePath).toBe(workspacePath);
     expect(config.configPath).toBe(path.join(workspacePath, "thoth.config.json"));
     expect(config.resolvedWikiPath).toBe(path.resolve(workspacePath, "../wiki"));
+  });
+
+  it("preserves a historical created_at when mutating a document", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki", dateFormat: "YYYY-MM-DD" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    const filePath = path.join(config.resolvedWikiPath, "notes", "historical.md");
+    await writeFile(filePath, `---\nid: historical\ntitle: Historical\ntype: note\nstatus: active\ncreated_at: 31/12/2020\nupdated_at: 31/12/2020\ntags: []\nrelated: []\n---\n\n# Historical\n\n## Content\n\nOld content.\n`, "utf8");
+
+    await updateWikiDocument(config, { id: "historical", status: "review" });
+    await appendWikiDocument(config, { id: "historical", content: "New content." });
+
+    const raw = await readFile(filePath, "utf8");
+    expect(raw).toContain("created_at: 31/12/2020");
+    expect(raw).toMatch(/updated_at: ['"]?\d{4}-\d{2}-\d{2}['"]?/);
   });
 
   it("initializes the configured wiki without overwriting an existing index", async () => {

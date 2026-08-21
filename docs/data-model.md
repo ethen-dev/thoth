@@ -108,10 +108,17 @@ Las escrituras y el schema rechazan estados fuera de este catalogo. `captured` s
 usa para fuentes recien incorporadas y `accepted`/`completed` para conocimiento
 revisado o trabajo terminado.
 
-Las fechas generadas respetan `dateFormat` de `thoth.config.json`. Se soportan
-`YYYY-MM-DD`, `DD/MM/YYYY`, `MM/DD/YYYY` y `YYYY/MM/DD`; cualquier otro valor
-usa de forma segura `YYYY-MM-DD`. Los dos formatos con día/mes usan el patrón
-portable `DD/MM/YYYY` o `MM/DD/YYYY` (`dd/mm` numérico) en el schema.
+Las fechas de dominio generadas respetan `dateFormat` de `thoth.config.json`.
+El MVP acepta únicamente `YYYY-MM-DD`; una configuración inválida se rechaza
+antes de cualquier escritura, nunca se sustituye silenciosamente. Las nuevas
+fechas de documentos, fuentes, logs, timelines e índices son date-only UTC.
+Los documentos históricos se conservan: actualizar, añadir contenido,
+relacionar o sincronizar no reescribe su `created_at`, aunque use un formato
+antiguo.
+
+Los timestamps técnicos de auditoría y locks son distintos de las fechas de
+dominio: pueden conservar precisión temporal (ISO-8601 para auditoría y
+milisegundos internos para locks) y no están sujetos a `dateFormat`.
 
 ### created_at
 

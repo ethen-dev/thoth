@@ -127,7 +127,7 @@ describe("MCP server", () => {
       expect(JSON.parse(statusResult.content[0]?.type === "text" ? statusResult.content[0].text : "{}")).toMatchObject({ wikiExists: true });
       expect(JSON.parse(doctorResult.content[0]?.type === "text" ? doctorResult.content[0].text : "{}")).toMatchObject({ ok: false, checks: expect.arrayContaining([expect.objectContaining({ name: ".thoth/index.json", status: "fail" }), expect.objectContaining({ name: ".thoth/relations.json", status: "fail" })]) });
       const diagnosticAudit = JSON.parse(auditResult.content[0]?.type === "text" ? auditResult.content[0].text : "{}").events as Array<{ operation: string; surface: string; affectedIds: string[] }>;
-      expect(diagnosticAudit.filter((event) => ["status", "doctor"].includes(event.affectedIds[0] ?? "") && event.surface === "mcp")).toHaveLength(4);
+      expect(diagnosticAudit.filter((event) => ["status", "doctor"].includes(event.affectedIds[0] ?? "") && event.surface === "mcp")).toHaveLength(2);
       expect(JSON.parse(skillListResult.content[0]?.type === "text" ? skillListResult.content[0].text : "{}").skills).toEqual(expect.arrayContaining([expect.objectContaining({ id: "wiki-query", path: "skills/llm-wiki/wiki-query.md" })]));
       expect(JSON.parse(skillShowResult.content[0]?.type === "text" ? skillShowResult.content[0].text : "{}")).toMatchObject({ id: "wiki-query", category: "llm-wiki" });
       expect(JSON.parse(skillValidateResult.content[0]?.type === "text" ? skillValidateResult.content[0].text : "{}")).toMatchObject({ ok: true });

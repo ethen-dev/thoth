@@ -27,8 +27,8 @@ import { executePlan, loadConfig, planIntentAudited, listThroughCore, showThroug
 import { discoverSkills, getSkill, runSkill, validateSkills } from "../skills/index.js";
 import { formatCliSearch, runCliSearch } from "./search.js";
 import { listAuditEvents, validateAuditLimit, verifyAudit } from "../audit/index.js";
+import { thothVersion } from "../version.js";
 
-const thothVersion = "0.6.0";
 const program = new Command();
 const documentTypeHelp = `Document type (${validWikiDocumentTypes.join(", ")})`;
 const captureDocumentTypeHelp = `Document type (${validWikiCaptureDocumentTypes.join(", ")}); use source add for source documents`;
@@ -94,14 +94,19 @@ program
       console.log(`Config: ${status.configPath}`);
       console.log(`Wiki: ${status.wikiPath}`);
       console.log(`Wiki exists: ${status.wikiExists ? "yes" : "no"}`);
-      console.log(`Index exists: ${status.indexExists ? "yes" : "no"}`);
+       console.log(`Wiki index: ${status.indexMd.exists ? (status.indexMd.valid ? "valid" : "invalid") : "missing"}`);
+       console.log(`Technical index: ${status.technicalIndex.exists ? (status.technicalIndex.valid ? `valid (${status.documentCount} documents)` : "invalid") : "missing"}`);
+       console.log(`Relations index: ${status.relationsIndex.exists ? (status.relationsIndex.valid ? `valid (${status.relationCount} relations)` : "invalid") : "missing"}`);
       console.log(
         `Missing directories: ${
           status.missingDirectories.length > 0
             ? status.missingDirectories.join(", ")
             : "none"
         }`,
-      );
+       );
+       console.log(`Audit: ${status.audit.enabled ? (status.audit.valid ? `valid (${status.audit.entries} entries)` : "invalid") : "disabled"}`);
+       console.log(`T.H.O.T.H. version: ${status.version}`);
+       if (!status.available) process.exitCode = 1;
     } catch (error) {
       reportError(error);
     }

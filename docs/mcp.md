@@ -17,6 +17,8 @@ configurada en `thoth.config.json`. La superficie real es la siguiente.
 | `wiki_relate` | `sourceId`, `targetId`, `relation`; opcionales `confirmed`, `confirmationToken` |
 | `wiki_index` | opcionales `human`, `dryRun`, `curated`, `categoryPages`, `type`, `maxPerSection`, `confirmed`, `confirmationToken` |
 | `wiki_lint` | sin parámetros |
+| `wiki_status` | sin parámetros; snapshot read-only del workspace, índices, conteos, auditoría resumida y versión |
+| `wiki_doctor` | sin parámetros; diagnóstico read-only separado de `wiki_status` |
 | `wiki_log` | `content`; opcionales `kind`, `project`, `ref` |
 | `wiki_source_list` / `wiki_source_show` | Lectura de fuentes por filtros o `id` |
 | `wiki_source_add` | `content`, `title`; metadatos opcionales |
@@ -25,6 +27,13 @@ configurada en `thoth.config.json`. La superficie real es la siguiente.
 `wiki_init` planifica la creación de estructura, `index.md` y `log.md` sin
 sobrescribir archivos existentes. `dryRun` no escribe; la ejecución requiere
 la confirmación y el token exactos de la propuesta.
+
+`wiki_status` es un snapshot rápido y consistente: no regenera, repara ni hace
+diagnóstico profundo, y no escribe auditoría. Devuelve la ruta absoluta de la
+wiki, existencia/validez básica de `index.md`, `.thoth/index.json` y
+`.thoth/relations.json`, conteos, directorios ausentes, estado de auditoría sin
+datos sensibles y versión. `wiki_doctor` mantiene la responsabilidad de
+diagnóstico detallado.
 
 `wiki_capture` no acepta fuentes (`type: source`); se crean con `source add`
 en la CLI. Para `type: task`, `projectId` debe identificar un proyecto

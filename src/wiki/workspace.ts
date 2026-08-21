@@ -14,6 +14,8 @@ import {
   writeFileIfMissing,
 } from "../storage/index.js";
 import type { AtomicWriteBatchEntry } from "../storage/index.js";
+import { auditPath, verifyAudit } from "../audit/index.js";
+import { thothVersion } from "../version.js";
 
 const wikiDirectories = [
   ".thoth",
@@ -143,6 +145,14 @@ export type WikiStatus = {
   wikiExists: boolean;
   indexExists: boolean;
   missingDirectories: string[];
+  available: boolean;
+  version: string;
+  indexMd: { exists: boolean; valid: boolean };
+  technicalIndex: { exists: boolean; valid: boolean; documents: number };
+  relationsIndex: { exists: boolean; valid: boolean; relations: number };
+  documentCount: number;
+  relationCount: number;
+  audit: { enabled: boolean; exists: boolean; valid: boolean; entries: number };
 };
 
 export type WikiInitResult = WikiStatus & {
@@ -377,14 +387,56 @@ export async function getWikiStatus(
     }
   }
 
+  const wikiExists = await pathExists(config.resolvedWikiPath);
+  const indexMdRaw = await inspectStatusFile(config.workspacePath, config.resolvedWikiPath, "index.md", "markdown");
+  const technicalIndexRaw = await inspectStatusFile(config.workspacePath, config.resolvedWikiPath, path.join(".thoth", "index.json"), "index");
+  const relationsIndexRaw = await inspectStatusFile(config.workspacePath, config.resolvedWikiPath, path.join(".thoth", "relations.json"), "relations");
+  const indexMd = { exists: indexMdRaw.exists, valid: indexMdRaw.valid };
+  const technicalIndex = { exists: technicalIndexRaw.exists, valid: technicalIndexRaw.valid, documents: technicalIndexRaw.documents };
+  const relationsIndex = { exists: relationsIndexRaw.exists, valid: relationsIndexRaw.valid, relations: relationsIndexRaw.relations };
+  const auditEnabled = config.audit?.enabled !== false;
+  let audit = { enabled: auditEnabled, exists: false, valid: !auditEnabled, entries: 0 };
+  if (auditEnabled) {
+    try {
+      const verification = await verifyAudit(config);
+      audit = { enabled: true, exists: await pathExists(auditPath(config)), valid: verification.valid, entries: verification.entries };
+    } catch {
+      audit = { enabled: true, exists: false, valid: false, entries: 0 };
+    }
+  }
+  const available = wikiExists && missingDirectories.length === 0 && indexMd.valid && technicalIndex.valid && relationsIndex.valid && audit.valid;
   return {
     workspacePath: config.workspacePath,
     configPath: config.configPath,
     wikiPath: config.resolvedWikiPath,
-    wikiExists: await pathExists(config.resolvedWikiPath),
-    indexExists: await pathExists(path.join(config.resolvedWikiPath, "index.md")),
+    wikiExists,
+    indexExists: indexMd.exists,
     missingDirectories,
+    available,
+    version: thothVersion,
+    indexMd,
+    technicalIndex,
+    relationsIndex,
+    documentCount: technicalIndex.documents,
+    relationCount: relationsIndex.relations,
+    audit,
   };
+}
+
+async function inspectStatusFile(workspacePath: string, wikiPath: string, relativePath: string, kind: "markdown" | "index" | "relations"): Promise<{ exists: boolean; valid: boolean; documents: number; relations: number }> {
+  const filePath = path.join(wikiPath, relativePath);
+  const exists = await pathExists(filePath);
+  try {
+    const raw = await readFile(filePath, "utf8");
+    if (!raw.trim()) throw new Error("empty");
+    if (kind === "markdown") { matter(raw); return { exists: true, valid: true, documents: 0, relations: 0 }; }
+    const schemas = await loadWikiSchemas(workspacePath);
+    const value = JSON.parse(raw) as { documents?: unknown[]; relations?: unknown[] };
+    const valid = (kind === "index" ? schemas.index : schemas.relationsIndex)(value);
+    return { exists: true, valid, documents: kind === "index" && Array.isArray(value.documents) ? value.documents.length : 0, relations: kind === "relations" && Array.isArray(value.relations) ? value.relations.length : 0 };
+  } catch {
+    return { exists, valid: false, documents: 0, relations: 0 };
+  }
 }
 
 async function initializeWikiUnsafe(
@@ -602,7 +654,7 @@ async function updateWikiDocumentUnsafe(
     metadata.tags = mergeTags(readStringArray(metadata.tags), input.tags);
   }
 
-  normalizeDateMetadata(metadata, config.dateFormat);
+  preserveCreatedAt(metadata, located.document.raw);
   metadata.updated_at = currentDate(config.dateFormat);
 
   await assertValidUpdatedDocumentRelations(config.resolvedWikiPath, input.id, metadata);
@@ -644,7 +696,7 @@ async function appendWikiDocumentUnsafe(
     return { id: input.id, path: located.document.path, section, updated: false };
   }
 
-  normalizeDateMetadata(metadata, config.dateFormat);
+  preserveCreatedAt(metadata, located.document.raw);
   metadata.updated_at = currentDate(config.dateFormat);
 
   await atomicWriteFile(located.path, matter.stringify(content, metadata), { workspaceRoot: config.resolvedWikiPath });
@@ -768,7 +820,7 @@ async function relateWikiDocumentsUnsafe(
         if (next !== content) { content = next; created += 1; }
       }
       if (created) {
-        normalizeDateMetadata(metadata, config.dateFormat);
+        preserveCreatedAt(metadata, document.raw);
         metadata.updated_at = currentDate(config.dateFormat);
         batch.push({ filePath: path.join(config.resolvedWikiPath, document.path), content: matter.stringify(content, metadata) });
         synchronized.documentsUpdated += 1;
@@ -815,7 +867,7 @@ function prepareRelationUpdate(
       : { created: false, content: matter.stringify(content, metadata) };
   }
   metadata.related = [...relations, { id: input.targetId, relation: input.relation }];
-  normalizeDateMetadata(metadata, dateFormat);
+  preserveCreatedAt(metadata, source.document.raw);
   metadata.updated_at = currentDate(dateFormat);
   const content = appendMarkdownRelation(parsed.content, {
     relation: input.relation,
@@ -1227,7 +1279,7 @@ async function syncWikiRelationLinksUnsafe(
     }
 
     if (documentLinksCreated > 0) {
-      normalizeDateMetadata(metadata, config.dateFormat);
+      preserveCreatedAt(metadata, document.raw);
       metadata.updated_at = currentDate(config.dateFormat);
       batch.push({ filePath: path.join(config.resolvedWikiPath, document.path), content: matter.stringify(content, metadata) });
       documentsUpdated += 1;
@@ -1757,14 +1809,10 @@ function mergeTags(existingTags: string[], newTags: string[]): string[] {
   return Array.from(new Set([...existingTags, ...newTags]));
 }
 
-function normalizeDateMetadata(metadata: Record<string, unknown>, dateFormat = "YYYY-MM-DD"): void {
-  for (const field of ["created_at", "updated_at"]) {
-    const value = metadata[field];
-
-    if (value instanceof Date) {
-      metadata[field] = formatDate(value, dateFormat);
-    }
-  }
+function preserveCreatedAt(metadata: Record<string, unknown>, raw: string): void {
+  const frontmatter = /^---\s*\n([\s\S]*?)\n---/u.exec(raw)?.[1];
+  const createdAt = frontmatter ? /^created_at:\s*(.*?)\s*$/mu.exec(frontmatter)?.[1] : undefined;
+  if (createdAt) metadata.created_at = createdAt.replace(/^(['"])(.*)\1$/u, "$2");
 }
 
 function createWikiDocumentMarkdown(input: {
@@ -1915,10 +1963,8 @@ function formatDate(date: Date, dateFormat: string): string {
   const year = String(date.getUTCFullYear()).padStart(4, "0");
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   const day = String(date.getUTCDate()).padStart(2, "0");
-  return dateFormat
-    .replace("YYYY", year)
-    .replace("MM", month)
-    .replace("DD", day);
+  if (dateFormat !== "YYYY-MM-DD") throw new Error("Invalid dateFormat: only YYYY-MM-DD is supported");
+  return `${year}-${month}-${day}`;
 }
 
 function yamlString(value: string): string {

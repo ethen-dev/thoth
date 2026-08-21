@@ -14,11 +14,12 @@ import {
 import { executePlan, loadConfig, planIntentAudited, queryThroughCore, listThroughCore, showThroughCore, lintThroughCore, statusThroughCore, doctorThroughCore, initThroughCore, writeThroughCore, sourceListThroughCore, sourceShowThroughCore } from "../core/index.js";
 import { discoverSkills, getSkill, runSkill, validateSkills } from "../skills/index.js";
 import { listAuditEvents } from "../audit/index.js";
+import { thothVersion } from "../version.js";
 
 export function createThothMcpServer(): McpServer {
   const server = new McpServer({
     name: "thoth",
-    version: "0.6.0",
+    version: thothVersion,
   });
 
   server.registerResource(
