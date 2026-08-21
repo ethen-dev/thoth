@@ -24,11 +24,15 @@ describe("safe filesystem storage", () => {
     roots.push(root);
     await mkdir(root, { recursive: true });
     let active = 0;
+    let signalAcquired!: () => void;
+    const acquired = new Promise<void>((resolve) => { signalAcquired = resolve; });
     const first = withWorkspaceLock(root, async () => {
       active += 1;
+      signalAcquired();
       await new Promise((resolve) => setTimeout(resolve, 60));
       active -= 1;
     });
+    await acquired;
     await expect(withWorkspaceLock(root, async () => undefined, 5)).rejects.toThrow(/timeout/);
     await first;
     expect(active).toBe(0);

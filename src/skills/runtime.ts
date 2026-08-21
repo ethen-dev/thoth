@@ -5,6 +5,8 @@ import { getSkill } from "./registry.js";
 import type { SkillProviderAdapter, SkillProviderRequest, SkillResult, SkillRuntimeConfig, SkillInvocation } from "./types.js";
 import { z } from "zod/v4";
 import { recordAudit } from "../audit/index.js";
+import { configConfirmationToken, readConfigSnapshot } from "../core/config.js";
+import { applyConfigMutation, planConfigMutation } from "../core/internal-config-mutation.js";
 
 const emptyFilter = z.preprocess((value) => value === "" ? undefined : value, z.string().min(1).optional());
 const querySchema = z.object({ query: z.string().trim().min(1).max(500), type: emptyFilter, status: emptyFilter, tag: emptyFilter, limit: z.number().int().min(1).max(20).default(20) }).strict();
@@ -22,14 +24,14 @@ const skillActions: Record<string, Set<string>> = {
   "wiki-ingest": new Set(["capture", "update"]),
   "wiki-crystallize": new Set(["capture", "update", "append"]),
   "wiki-integrate": new Set(["update", "append"]),
-  "wiki-config": new Set(),
+  "wiki-config": new Set(["config_update"]),
 };
 const nonAtomicActions = new Set(["relate", "source_link", "log", "index"]);
 const proposalSchema = z.object({
   version: z.literal(1),
   summary: z.string().min(1).max(2000),
   actions: z.array(z.object({
-    intent: z.enum(["capture", "update", "append", "source_add", "relate", "log", "index", "source_link"]),
+  intent: z.enum(["capture", "update", "append", "source_add", "relate", "log", "index", "source_link", "config_update"]),
     input: z.record(z.string(), z.unknown()),
   }).strict()).min(1).max(1),
 }).strict();
@@ -83,7 +85,6 @@ function failure(skillId: string, code: string, message: string, mode: SkillInvo
 }
 
 async function runLlmSkill(config: SkillRuntimeConfig, skillId: string, version: string, documentation: string, invocation: SkillInvocation, provider?: SkillProviderAdapter): Promise<SkillResult> {
-  if (skillId === "wiki-config") return failure(skillId, "unsupported", "wiki-config has no safe document mutation handler", invocation.mode);
   if (!provider) return failure(skillId, "provider_required", "An injected SkillProviderAdapter is required for LLM skills", invocation.mode);
   let proposal: z.infer<typeof proposalSchema>;
   try {
@@ -97,6 +98,21 @@ async function runLlmSkill(config: SkillRuntimeConfig, skillId: string, version:
     return failure(skillId, "invalid_proposal", errorMessage(error), invocation.mode);
   }
   const action = proposal.actions[0];
+  if (skillId === "wiki-config") {
+    if (action.intent !== "config_update") return failure(skillId, "skill_action_not_allowed", "Only config_update is allowed for wiki-config", invocation.mode);
+    const input = action.input as Record<string, unknown>;
+    const changes = input.changes;
+    if (Object.keys(input).length !== 1 || !changes || typeof changes !== "object" || Array.isArray(changes)) return failure(skillId, "invalid_proposal", "wiki-config requires a flat changes object", invocation.mode);
+    const changeMap = changes as Record<string, unknown>;
+    if (Object.keys(changeMap).length === 0 || Object.keys(changeMap).some((key) => !["defaultType", "defaultStatus", "dateFormat"].includes(key) || typeof changeMap[key] !== "string")) return failure(skillId, "invalid_proposal", "wiki-config contains a forbidden or nested change", invocation.mode);
+    try {
+      const snapshot = await readConfigSnapshot(config);
+      if (Object.keys(changeMap).every((key) => snapshot.effective[key as keyof typeof snapshot.effective] === changeMap[key])) return failure(skillId, "change_has_no_effect", "The proposed configuration changes have no effect", invocation.mode);
+      const planned = planConfigMutation(changeMap, snapshot.hash);
+      if (planned.status === "error") return failure(skillId, planned.error?.code ?? "invalid_proposal", planned.error?.message ?? "Proposal rejected", invocation.mode);
+      return finishConfigProposal(config, skillId, version, invocation, proposal, planned, snapshot.hash, changeMap);
+    } catch (error) { return failure(skillId, "invalid_config", errorMessage(error), invocation.mode); }
+  }
   if (nonAtomicActions.has(action.intent)) return failure(skillId, "non_atomic_action", `Action ${action.intent} is not available from a skill`, invocation.mode);
   if (!skillActions[skillId]?.has(action.intent)) return failure(skillId, "skill_action_not_allowed", `Action ${action.intent} is not allowed for ${skillId}`, invocation.mode);
   const planned = planIntent(config, { intent: action.intent, input: action.input });
@@ -105,6 +121,31 @@ async function runLlmSkill(config: SkillRuntimeConfig, skillId: string, version:
     return { ok: true, skillId, mode: invocation.mode, readOnly: true, status: "validated", data: { proposal, plan: planned, confirmationToken: proposalToken(skillId, version, planned, invocation.input, proposal), ...(invocation.mode === "dry-run" ? { dryRun: true } : {}) } };
   }
   const token = proposalToken(skillId, version, planned, invocation.input, proposal);
+  if (!invocation.confirmed) return { ok: true, skillId, mode: "execute", readOnly: true, status: "error", data: { proposal, plan: planned, confirmationToken: token }, error: { code: "confirmation_required", message: "Confirmation is required before executing a mutation" } };
+  if (!invocation.confirmationToken) return failure(skillId, "confirmation_token_required", "confirmed=true requires the exact confirmationToken", invocation.mode);
+  if (invocation.confirmationToken !== token) return failure(skillId, "confirmation_mismatch", "The confirmationToken does not match the reviewed proposal", invocation.mode);
+  const result = await executePlan(config, planned, { confirmed: true });
+  return { ok: result.ok, skillId, mode: "execute", readOnly: false, status: result.ok ? "executed" : "error", data: result, error: result.error };
+}
+
+async function finishConfigProposal(config: SkillRuntimeConfig, skillId: string, version: string, invocation: SkillInvocation, proposal: z.infer<typeof proposalSchema>, planned: ReturnType<typeof planIntent>, expectedHash: string, changes: Record<string, unknown>): Promise<SkillResult> {
+  const tokenInput = { skillId, version, plan: planned, input: invocation.input ?? {}, proposal };
+  const token = configConfirmationToken(tokenInput);
+  if (invocation.mode === "validate" || invocation.mode === "plan" || invocation.mode === "dry-run") return { ok: true, skillId, mode: invocation.mode, readOnly: true, status: "validated", data: { proposal, plan: planned, confirmationToken: token, ...(invocation.mode === "dry-run" ? { dryRun: true } : {}) } };
+  if (!invocation.confirmed) return { ok: true, skillId, mode: "execute", readOnly: true, status: "error", data: { proposal, plan: planned, confirmationToken: token }, error: { code: "confirmation_required", message: "Confirmation is required before executing a mutation" } };
+  if (!invocation.confirmationToken) return failure(skillId, "confirmation_token_required", "confirmed=true requires the exact confirmationToken", invocation.mode);
+  if (invocation.confirmationToken !== token) return failure(skillId, "confirmation_mismatch", "The confirmationToken does not match the reviewed proposal", invocation.mode);
+  try {
+    const result = await applyConfigMutation(config, changes, expectedHash, { token, tokenInput });
+    return { ok: true, skillId, mode: "execute", readOnly: false, status: "executed", data: result };
+  } catch (error) {
+    return failure(skillId, error instanceof Error && error.message === "confirmation_mismatch" ? "confirmation_mismatch" : "execution_error", errorMessage(error), invocation.mode);
+  }
+}
+
+async function finishProposal(config: SkillRuntimeConfig, skillId: string, version: string, invocation: SkillInvocation, proposal: z.infer<typeof proposalSchema>, planned: ReturnType<typeof planIntent>): Promise<SkillResult> {
+  const token = proposalToken(skillId, version, planned, invocation.input, proposal);
+  if (invocation.mode === "validate" || invocation.mode === "plan" || invocation.mode === "dry-run") return { ok: true, skillId, mode: invocation.mode, readOnly: true, status: "validated", data: { proposal, plan: planned, confirmationToken: token, ...(invocation.mode === "dry-run" ? { dryRun: true } : {}) } };
   if (!invocation.confirmed) return { ok: true, skillId, mode: "execute", readOnly: true, status: "error", data: { proposal, plan: planned, confirmationToken: token }, error: { code: "confirmation_required", message: "Confirmation is required before executing a mutation" } };
   if (!invocation.confirmationToken) return failure(skillId, "confirmation_token_required", "confirmed=true requires the exact confirmationToken", invocation.mode);
   if (invocation.confirmationToken !== token) return failure(skillId, "confirmation_mismatch", "The confirmationToken does not match the reviewed proposal", invocation.mode);

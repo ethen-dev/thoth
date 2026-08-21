@@ -6,6 +6,7 @@ import {
 } from "../actions/index.js";
 import { runSkill } from "../skills/runtime.js";
 import { recordAudit } from "../audit/index.js";
+import { planConfigMutation } from "./internal-config-mutation.js";
 import type { ResolvedThothConfig } from "./config.js";
 import { coreIntents, maxCorePlanSteps, type CoreAction, type CoreError, type CoreResult, type IntentRequest, type PlanStep, type ThothPlan } from "./types.js";
 

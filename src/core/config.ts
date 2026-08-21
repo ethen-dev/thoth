@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
+import { z } from "zod/v4";
 
 export type ThothConfig = {
   wikiPath: string;
@@ -32,6 +34,11 @@ export type ResolvedThothConfig = ThothConfig & {
   configPath: string;
   resolvedWikiPath: string;
 };
+export const configMutationKeys = ["defaultType", "defaultStatus", "dateFormat"] as const;
+export type ConfigMutationKey = (typeof configMutationKeys)[number];
+export type ConfigMutation = Partial<Record<ConfigMutationKey, string>>;
+const auditSchema = z.object({ enabled: z.boolean().optional(), path: z.string().min(1).optional(), actor: z.string().min(1).optional(), maxEntryBytes: z.number().int().min(256).max(1048576).optional(), maxStringLength: z.number().int().min(32).max(10000).optional(), redactKeys: z.array(z.string()).optional() }).strict();
+const completeConfigSchema = z.object({ wikiPath: z.string().min(1).optional(), defaultType: z.string().min(1).optional(), defaultStatus: z.string().min(1).optional(), dateFormat: z.enum(supportedDateFormats).optional(), audit: auditSchema.optional() }).strict();
 
 const defaultConfig: ThothConfig = {
   wikiPath: "wiki",
@@ -53,7 +60,7 @@ export async function loadConfig(
   const configPath = await resolveConfigPath(workspacePath);
   const resolvedWorkspacePath = path.dirname(configPath);
   const rawConfig = await readFile(configPath, "utf8");
-  const parsedConfig = JSON.parse(rawConfig) as Partial<ThothConfig>;
+  const parsedConfig = parseConfigSource(rawConfig);
   const config: ThothConfig = { ...defaultConfig, ...parsedConfig, audit: { ...defaultConfig.audit, ...(parsedConfig.audit ?? {}) }, dateFormat: resolveDateFormat(parsedConfig.dateFormat) };
 
   if (!config.wikiPath || typeof config.wikiPath !== "string") {
@@ -67,6 +74,32 @@ export async function loadConfig(
     resolvedWikiPath: path.resolve(resolvedWorkspacePath, config.wikiPath),
   };
 }
+
+export async function readConfigSnapshot(config: ResolvedThothConfig): Promise<{ raw: Record<string, unknown>; effective: ThothConfig; hash: string }> {
+  const source = await readFile(config.configPath, "utf8");
+  const raw = parseConfigSource(source);
+  const effective = { ...defaultConfig, ...raw, audit: { ...defaultConfig.audit, ...((raw.audit ?? {}) as object) } } as ThothConfig;
+  return { raw, effective, hash: createHash("sha256").update(source).digest("hex") };
+}
+
+function parseConfigSource(source: string): Record<string, unknown> {
+  let parsed: unknown;
+  try { parsed = JSON.parse(source); } catch (error) { throw new Error(`Invalid thoth.config.json: ${error instanceof Error ? error.message : String(error)}`); }
+  const checked = completeConfigSchema.safeParse(parsed);
+  if (!checked.success) throw new Error(`Invalid thoth.config.json: ${checked.error.issues.map((issue) => `${issue.path.join(".")} ${issue.message}`).join(", ")}`);
+  return checked.data as Record<string, unknown>;
+}
+
+export function configConfirmationToken(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(stable(value))).digest("hex");
+}
+
+function stable(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stable);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => [key, stable(entry)]));
+  return value;
+}
+
 
 async function resolveConfigPath(workspacePath?: string): Promise<string> {
   const candidates = workspacePath

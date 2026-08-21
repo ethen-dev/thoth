@@ -63,6 +63,8 @@ describe("MCP server", () => {
       const coreWriteResult = await client.callTool({ name: "core_execute", arguments: { plan: JSON.parse(coreWritePlan.content[0]?.type === "text" ? coreWritePlan.content[0].text : "{}") } });
       const coreMalformedResult = await client.callTool({ name: "core_execute", arguments: { plan: [] } });
       const coreCrossedResult = await client.callTool({ name: "core_plan", arguments: { intent: "query", action: "wiki.show", input: { id: "wiki-index" } } });
+      const configCoreResult = await client.callTool({ name: "core_plan", arguments: { intent: "config_update", input: {} } });
+      const configSkillResult = await client.callTool({ name: "skill_run", arguments: { skillId: "wiki-config", input: {}, mode: "execute", confirmed: true } });
       const legacySearchResult = await client.callTool({ name: "wiki_search", arguments: { query: "not-present", limit: 1 } });
       const migratedSearchResult = await client.callTool({ name: "wiki_search", arguments: { query: "needle", status: "active", tag: "keep", limit: 1 } });
       const longSearchResult = await client.callTool({ name: "wiki_search", arguments: { query: "x".repeat(501) } });
@@ -101,6 +103,8 @@ describe("MCP server", () => {
       expect(JSON.parse(coreWriteResult.content[0]?.type === "text" ? coreWriteResult.content[0].text : "{}")).toMatchObject({ status: "proposal", error: { code: "confirmation_required" } });
       expect(JSON.parse(coreMalformedResult.content[0]?.type === "text" ? coreMalformedResult.content[0].text : "{}")).toMatchObject({ ok: false, error: { code: "invalid_input" } });
       expect(JSON.parse(coreCrossedResult.content[0]?.type === "text" ? coreCrossedResult.content[0].text : "{}")).toMatchObject({ status: "error", error: { code: "not_allowlisted" } });
+      expect(JSON.parse(configCoreResult.content[0]?.type === "text" ? configCoreResult.content[0].text : "{}")).toMatchObject({ status: "error", error: { code: "not_allowlisted" } });
+      expect(JSON.parse(configSkillResult.content[0]?.type === "text" ? configSkillResult.content[0].text : "{}")).toMatchObject({ ok: false, error: { code: "provider_required" } });
       const legacySearch = JSON.parse(legacySearchResult.content[0]?.type === "text" ? legacySearchResult.content[0].text : "{}");
       expect(legacySearch.results).toEqual([]);
       const migratedSearch = JSON.parse(migratedSearchResult.content[0]?.type === "text" ? migratedSearchResult.content[0].text : "{}");

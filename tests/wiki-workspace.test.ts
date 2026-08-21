@@ -57,7 +57,7 @@ describe("wiki workspace", () => {
     );
   });
 
-  it("uses supported date formats and safely falls back for invalid formats", async () => {
+  it("uses supported date formats and rejects invalid formats", async () => {
     const formats = ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD"] as const;
     for (const dateFormat of formats) {
       const workspacePath = await createWorkspace({ wikiPath: "../wiki", dateFormat });
@@ -74,9 +74,8 @@ describe("wiki workspace", () => {
       expect((await lintWikiDocuments(config)).issues).toEqual([]);
     }
 
-    const fallbackWorkspace = await createWorkspace({ wikiPath: "../wiki", dateFormat: "not-supported" });
-    const fallback = await loadConfig(fallbackWorkspace);
-    expect(fallback.dateFormat).toBe("YYYY-MM-DD");
+    const invalidWorkspace = await createWorkspace({ wikiPath: "../wiki", dateFormat: "not-supported" });
+    await expect(loadConfig(invalidWorkspace)).rejects.toThrow(/dateFormat/);
   });
 
   it("loads config from THOTH_CONFIG outside the workspace", async () => {

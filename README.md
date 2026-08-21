@@ -182,6 +182,12 @@ thoth skills run wiki-ingest --mode dry-run --input '{"content":"..."}'
 `confirmation_required` proposal. `relate`, `log`, `index`, `source_link` and
 multi-file actions remain `non_atomic_action`.
 
+`wiki-config` is the first real configuration mutation: only `defaultType`,
+`defaultStatus` and `dateFormat` are allowlisted. It preserves known fields that
+are not modified, rejects unknown top-level configuration fields, `audit.*`,
+nested/no-op changes, and protects the
+atomic write with a configuration hash checked under the workspace lock.
+
 ## Repository Map
 
 - `src/cli/`: CLI entrypoint.

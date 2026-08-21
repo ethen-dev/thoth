@@ -136,7 +136,7 @@ describe("skill runtime", () => {
     const existing = path.join(current.resolvedWikiPath, "notes", "note-configured.md");
     await writeFile(existing, "---\nid: note-configured\ntitle: Existing\ntype: note\nstatus: active\ntags: []\n---\nexisting\n", "utf8");
     const configProvider = { complete: () => ({ version: 1, summary: "config", actions: [{ intent: "capture", input: { id: "note-configured", title: "Configured", type: "note", content: "new" } }] }) };
-    expect(await runSkill(current, { skillId: "wiki-config", input: {}, mode: "execute", confirmed: true }, configProvider)).toMatchObject({ ok: false, status: "unsupported", error: { code: "unsupported" } });
+    expect(await runSkill(current, { skillId: "wiki-config", input: {}, mode: "execute", confirmed: true }, configProvider)).toMatchObject({ ok: false, error: { code: "skill_action_not_allowed" } });
     const nonAtomic = { complete: () => ({ version: 1, summary: "relate", actions: [{ intent: "relate", input: { sourceId: "a", targetId: "b", relation: "supports" } }] }) };
     expect(await runSkill(current, { skillId: "wiki-integrate", input: {}, mode: "execute", confirmed: true }, nonAtomic)).toMatchObject({ error: { code: "non_atomic_action" } });
     await rm(current.workspacePath, { recursive: true, force: true });

@@ -1,4 +1,5 @@
-export * from "./config.js";
+export { createDefaultConfig, loadConfig, resolveDateFormat, supportedDateFormats } from "./config.js";
+export type { AuditConfig, DateFormat, ResolvedThothConfig, ThothConfig } from "./config.js";
 export * from "./types.js";
 export * from "./runtime.js";
 export * from "./query-adapter.js";

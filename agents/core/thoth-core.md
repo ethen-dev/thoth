@@ -59,7 +59,7 @@ Genial, super buena idea! Voy a guardar esto por ti.
 
 ## Primary Skills
 
-- `wiki-config`: validate or initialize the configured wiki path
+- `wiki-config`: safely propose and apply allowlisted defaults (`defaultType`, `defaultStatus`, and `dateFormat`)
 - `wiki-ingest`: route save operations through the knowledge ingestion flow
 - `wiki-query`: recover context before answering or writing
 - `wiki-crystallize`: preserve durable session knowledge
@@ -73,6 +73,14 @@ Genial, super buena idea! Voy a guardar esto por ti.
 - index and relation results
 - agent or skill outputs
 - pending write proposal
+
+## wiki-config safety boundary
+
+`wiki-config` only mutates the allowlisted `defaultType`, `defaultStatus`, and
+`dateFormat` fields through the validated proposal, confirmation-token, and
+workspace-lock flow. It does not initialize the wiki and must never initialize
+or change `wikiPath`; wiki initialization and path selection belong to the
+workspace configuration flow.
 
 ## Outputs
 
