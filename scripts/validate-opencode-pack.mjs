@@ -32,6 +32,16 @@ const windowsAgentInstallerPath = join(root, "opencode", "install", "install-ope
 const windowsUpdaterPath = join(root, "opencode", "install", "update-thoth.ps1");
 const readmePath = join(root, "opencode", "README.md");
 
+const pendingScopeSafeguardRule = "- [Pending-scope safeguard] Before classifying anything as pending, contrast it with the complete inventory/list, the source document, architectural decisions, agreed scope, and available verification evidence. Distinguish mandatory/blocking work from optional/future work; never turn an optional capability into MVP debt unless the sources establish that it is required or blocking.";
+const pendingScopeSafeguardAgents = new Map([
+  [agentPath, "## Pending-scope safeguard"],
+  [join(root, "opencode", "agents", "thoth-dev-router.md"), "## Pending-scope safeguard"],
+  [join(root, "opencode", "agents", "thoth-dev-implementer.md"), "## Pending-scope safeguard"],
+  [join(root, "opencode", "agents", "thoth-dev-reviewer.md"), "## Pending-scope safeguard"],
+  [join(root, "opencode", "agents", "thoth-dev-verifier.md"), "## Pending-scope safeguard"],
+  [join(root, "opencode", "agents", "thoth-dev-receipt.md"), "## Pending-scope safeguard"],
+]);
+
 const requiredAgentSnippets = [
   "description: Autonomous memory agent",
   "Autonomous Memory Policy",
@@ -402,6 +412,44 @@ function assertIncludes(content, snippets, label) {
   }
 }
 
+function assertOperationalRule(content, sectionHeading, rule, label) {
+  const lines = content.split(/\r?\n/);
+  const sectionStart = lines.indexOf(sectionHeading);
+  if (sectionStart === -1) {
+    throw new Error(`${label} is missing operational section: ${sectionHeading}`);
+  }
+
+  const sectionEnd = lines.findIndex((line, index) => index > sectionStart && line.startsWith("## "));
+  const sectionLines = lines.slice(sectionStart + 1, sectionEnd === -1 ? lines.length : sectionEnd);
+  if (!sectionLines.includes(rule)) {
+    throw new Error(`${label} is missing exact operational rule in ${sectionHeading}`);
+  }
+}
+
+function assertRejects(label, callback) {
+  try {
+    callback();
+  } catch {
+    return;
+  }
+  throw new Error(`${label} unexpectedly passed`);
+}
+
+const safeguardFixture = `## Pending-scope safeguard\n${pendingScopeSafeguardRule}\n## Next section`;
+assertOperationalRule(safeguardFixture, "## Pending-scope safeguard", pendingScopeSafeguardRule, "safeguard validator fixture");
+assertRejects("safeguard validator incidental-text case", () => assertOperationalRule(
+  `## Pending-scope safeguard\nThe rule says: ${pendingScopeSafeguardRule}\n## Next section`,
+  "## Pending-scope safeguard",
+  pendingScopeSafeguardRule,
+  "safeguard validator incidental-text case",
+));
+assertRejects("safeguard validator wrong-section case", () => assertOperationalRule(
+  `## Other section\n${pendingScopeSafeguardRule}\n## Pending-scope safeguard`,
+  "## Pending-scope safeguard",
+  pendingScopeSafeguardRule,
+  "safeguard validator wrong-section case",
+));
+
 function run(command, args) {
   const result = spawnSync(command, args, {
     cwd: root,
@@ -462,6 +510,7 @@ const [agent, readme, autonomousMemoryDoc] = await Promise.all([
 ]);
 
 assertIncludes(agent, requiredAgentSnippets, "OpenCode agent");
+assertOperationalRule(agent, pendingScopeSafeguardAgents.get(agentPath), pendingScopeSafeguardRule, "OpenCode agent pending-scope safeguard");
 assertPermissionContract(agentPath, agent);
 assertIncludes(readme, requiredReadmeSnippets, "OpenCode README");
 assertIncludes(autonomousMemoryDoc, requiredAutonomousMemoryDocSnippets, "Autonomous memory doc");
@@ -472,6 +521,10 @@ for (const [index, subagent] of subagents.entries()) {
   assertPermissionContract(subagentPaths[index], subagent);
   if (subagentPaths[index].includes("thoth-dev-")) {
     assertIncludes(subagent, requiredDevelopmentSubagentSnippets, `OpenCode development subagent ${subagentPaths[index]}`);
+  }
+  const safeguardSection = pendingScopeSafeguardAgents.get(subagentPaths[index]);
+  if (safeguardSection) {
+    assertOperationalRule(subagent, safeguardSection, pendingScopeSafeguardRule, `OpenCode development subagent pending-scope safeguard ${subagentPaths[index]}`);
   }
 }
 

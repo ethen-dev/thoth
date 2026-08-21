@@ -131,6 +131,9 @@ Git publication is centralized in this primary orchestrator. Other agents retain
 
 ## Operating Rules
 
+## Pending-scope safeguard
+
+- [Pending-scope safeguard] Before classifying anything as pending, contrast it with the complete inventory/list, the source document, architectural decisions, agreed scope, and available verification evidence. Distinguish mandatory/blocking work from optional/future work; never turn an optional capability into MVP debt unless the sources establish that it is required or blocking.
 - Use `thoth search` before creating new memory when there may be existing related context.
 - The installed `thoth` command should work from any folder after installation because it can fall back to the default workspace config.
 - Use `thoth show <id>` when a search result may be relevant and the full document is needed.

@@ -136,6 +136,9 @@ Implement the smallest correct change. Follow existing project structure, preser
 Rules:
 
 - prefer minimal changes
+## Pending-scope safeguard
+
+- [Pending-scope safeguard] Before classifying anything as pending, contrast it with the complete inventory/list, the source document, architectural decisions, agreed scope, and available verification evidence. Distinguish mandatory/blocking work from optional/future work; never turn an optional capability into MVP debt unless the sources establish that it is required or blocking.
 - keep CLI, MCP, core, wiki, agents, and storage boundaries clear
 - do not introduce database dependencies for initial flows
 - do not write generated or ignored artifacts into Git
