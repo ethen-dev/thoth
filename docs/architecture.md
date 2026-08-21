@@ -42,10 +42,17 @@ Responsabilidades iniciales:
 - recuperar consultas progresivamente mediante la skill `wiki-query`, limitada
   a candidatos y snippets
 
-`core_plan`/`core_execute` son la ruta estructurada provider-agnostic: requieren
-confirmación para writes y rechazan acciones no atómicas. La CLI y las tools
-MCP legacy siguen existiendo por compatibilidad y todavía no están migradas al
-Core; por tanto el Core no es una garantía global de toda la aplicación.
+`core_plan`/`core_execute` son la ruta estructurada provider-agnostic. La
+planificación se audita una vez como `core.plan` en la superficie que la invoca
+(`cli` o `mcp`); los adapters no generan eventos propios. Las escrituras
+devuelven una propuesta con `confirmationToken`; se ejecutan con
+`confirmed: true` o con ese token válido. `executePlan` concentra la auditoría
+de propuesta, rechazo, ejecución y error.
+
+CLI y MCP conservan nombres y formatos mediante adapters. `query/wiki_search`
+mantiene su búsqueda resumida y produce un único evento de ejecución del Core.
+`relate`, `index`, `sync-links`, `init`, `status` y `doctor` permanecen fuera de
+esta migración.
 
 Las mutaciones single-file usan escritura temporal en el mismo directorio,
 preservan los permisos existentes (o usan un modo definido para archivos

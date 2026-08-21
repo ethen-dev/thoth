@@ -12,10 +12,14 @@ configurada en `thoth.config.json`. La superficie real es la siguiente.
 | `wiki_show` | `id`; `mode`: `content`, `metadata` o `raw` |
 | `wiki_capture` | `content`; opcionales `title`, `type`, `status`, `tags` (array), `projectId` |
 | `wiki_update` | `id`; opcionales `title`, `type`, `status`, `tags` (array) |
+| `wiki_append` | `id`, `content`; opcional `section` |
 | `wiki_relate` | `sourceId`, `targetId`, `relation` |
 | `wiki_index` | sin parámetros |
 | `wiki_lint` | sin parámetros |
 | `wiki_log` | `content`; opcionales `kind`, `project`, `ref` |
+| `wiki_source_list` / `wiki_source_show` | Lectura de fuentes por filtros o `id` |
+| `wiki_source_add` | `content`, `title`; metadatos opcionales |
+| `wiki_source_link` | `sourceId`, `targetId` |
 
 `wiki_capture` no acepta fuentes (`type: source`); se crean con `source add`
 en la CLI. Para `type: task`, `projectId` debe identificar un proyecto
@@ -94,6 +98,10 @@ no constituye una garantía global sobre todas las tools.
 `wiki_search` ya usa el intent Core `query` mediante un adaptador compartido:
 conserva resultados resumidos, `limit` opcional entero de 1 a 20 (por defecto
 20), filtros `type`, `status` y `tag`, además de su envoltura JSON/content.
-Solo `wiki_search` está migrada en este slice; las demás tools MCP siguen
-siendo superficies legacy sin migrar al Core. El Core rechaza acciones
-multiarchivo sin transacción.
+`wiki_list`, `wiki_show`, `wiki_lint` y `wiki_source_list/show` usan adapters de
+lectura del Core. `wiki_capture`, `wiki_update`, `wiki_append`, `wiki_log` y
+`wiki_source_add/link` planifican y ejecutan mediante el Core: devuelven una
+propuesta por defecto y requieren `confirmed` o el `confirmationToken` exacto.
+Mantienen las formas legacy `{documents}` y `{content,metadata,raw}`.
+`wiki_relate` y `wiki_index` quedan fuera de esta migración, igual que las
+operaciones sin intención atómica equivalente.

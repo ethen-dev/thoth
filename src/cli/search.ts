@@ -2,7 +2,7 @@ import { queryThroughCore, type QueryAdapterInput, type QuerySummary } from "../
 import type { ResolvedThothConfig } from "../core/config.js";
 
 export async function runCliSearch(config: ResolvedThothConfig, input: QueryAdapterInput): Promise<QuerySummary[]> {
-  return queryThroughCore(config, input);
+  return queryThroughCore(config, input, "cli");
 }
 
 export function formatCliSearch(results: QuerySummary[]): string {

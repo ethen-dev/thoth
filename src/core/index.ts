@@ -3,6 +3,7 @@ export type { AuditConfig, DateFormat, ResolvedThothConfig, ThothConfig } from "
 export * from "./types.js";
 export * from "./runtime.js";
 export * from "./query-adapter.js";
+export * from "./adapters.js";
 export * from "../audit/index.js";
 
 export type ThothActionResult = {

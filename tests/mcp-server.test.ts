@@ -63,10 +63,31 @@ describe("MCP server", () => {
       const coreWriteResult = await client.callTool({ name: "core_execute", arguments: { plan: JSON.parse(coreWritePlan.content[0]?.type === "text" ? coreWritePlan.content[0].text : "{}") } });
       const coreMalformedResult = await client.callTool({ name: "core_execute", arguments: { plan: [] } });
       const coreCrossedResult = await client.callTool({ name: "core_plan", arguments: { intent: "query", action: "wiki.show", input: { id: "wiki-index" } } });
+      const captureProposalResult = await client.callTool({ name: "wiki_capture", arguments: { content: "mcp captured", title: "MCP captured" } });
+      const captureProposal = JSON.parse(captureProposalResult.content[0]?.type === "text" ? captureProposalResult.content[0].text : "{}");
+      const captureResult = await client.callTool({ name: "wiki_capture", arguments: { content: "mcp captured", title: "MCP captured", confirmed: true, confirmationToken: captureProposal.plan.confirmationToken } });
+      const updateProposalResult = await client.callTool({ name: "wiki_update", arguments: { id: "note-match", title: "MCP updated" } });
+      const updateProposal = JSON.parse(updateProposalResult.content[0]?.type === "text" ? updateProposalResult.content[0].text : "{}");
+      const updateResult = await client.callTool({ name: "wiki_update", arguments: { id: "note-match", title: "MCP updated", confirmed: true, confirmationToken: updateProposal.plan.confirmationToken } });
+      const appendProposalResult = await client.callTool({ name: "wiki_append", arguments: { id: "note-match", content: "mcp append" } });
+      const appendProposal = JSON.parse(appendProposalResult.content[0]?.type === "text" ? appendProposalResult.content[0].text : "{}");
+      const appendResult = await client.callTool({ name: "wiki_append", arguments: { id: "note-match", content: "mcp append", confirmed: true, confirmationToken: appendProposal.plan.confirmationToken } });
+      const sourceProposalResult = await client.callTool({ name: "wiki_source_add", arguments: { content: "raw mcp", title: "MCP source" } });
+      const sourceProposal = JSON.parse(sourceProposalResult.content[0]?.type === "text" ? sourceProposalResult.content[0].text : "{}");
+      const sourceResult = await client.callTool({ name: "wiki_source_add", arguments: { content: "raw mcp", title: "MCP source", confirmed: true, confirmationToken: sourceProposal.plan.confirmationToken } });
+      const sourcePayload = JSON.parse(sourceResult.content[0]?.type === "text" ? sourceResult.content[0].text : "{}");
+      const sourceId = sourcePayload.results?.[0]?.id ?? "source-mcp-source";
+      const linkProposalResult = await client.callTool({ name: "wiki_source_link", arguments: { sourceId, targetId: "note-match" } });
+      const linkProposal = JSON.parse(linkProposalResult.content[0]?.type === "text" ? linkProposalResult.content[0].text : "{}");
+      const linkResult = await client.callTool({ name: "wiki_source_link", arguments: { sourceId, targetId: "note-match", confirmed: true, confirmationToken: linkProposal.plan.confirmationToken } });
+      const logProposalResult = await client.callTool({ name: "wiki_log", arguments: { content: "mcp log" } });
+      const logProposal = JSON.parse(logProposalResult.content[0]?.type === "text" ? logProposalResult.content[0].text : "{}");
+      const logResult = await client.callTool({ name: "wiki_log", arguments: { content: "mcp log", confirmed: true, confirmationToken: logProposal.plan.confirmationToken } });
       const configCoreResult = await client.callTool({ name: "core_plan", arguments: { intent: "config_update", input: {} } });
       const configSkillResult = await client.callTool({ name: "skill_run", arguments: { skillId: "wiki-config", input: {}, mode: "execute", confirmed: true } });
       const legacySearchResult = await client.callTool({ name: "wiki_search", arguments: { query: "not-present", limit: 1 } });
       const migratedSearchResult = await client.callTool({ name: "wiki_search", arguments: { query: "needle", status: "active", tag: "keep", limit: 1 } });
+      const auditResult = await client.callTool({ name: "audit_list", arguments: { limit: 100 } });
       const longSearchResult = await client.callTool({ name: "wiki_search", arguments: { query: "x".repeat(501) } });
       const wikiCaptureTool = tools.tools.find((tool) => tool.name === "wiki_capture");
       const wikiUpdateTool = tools.tools.find((tool) => tool.name === "wiki_update");
@@ -101,6 +122,18 @@ describe("MCP server", () => {
       expect(JSON.parse(corePlanResult.content[0]?.type === "text" ? corePlanResult.content[0].text : "{}")).toMatchObject({ status: "planned", steps: [{ action: "skill.wiki-query", write: false }] });
       expect(JSON.parse(coreExecuteResult.content[0]?.type === "text" ? coreExecuteResult.content[0].text : "{}")).toMatchObject({ ok: true, status: "executed" });
       expect(JSON.parse(coreWriteResult.content[0]?.type === "text" ? coreWriteResult.content[0].text : "{}")).toMatchObject({ status: "proposal", error: { code: "confirmation_required" } });
+      expect(captureProposal).toMatchObject({ status: "proposal", error: { code: "confirmation_required" } });
+      expect(JSON.parse(captureResult.content[0]?.type === "text" ? captureResult.content[0].text : "{}")).toMatchObject({ status: "executed" });
+      expect(JSON.parse(updateResult.content[0]?.type === "text" ? updateResult.content[0].text : "{}")).toMatchObject({ status: "executed" });
+      expect(JSON.parse(appendResult.content[0]?.type === "text" ? appendResult.content[0].text : "{}")).toMatchObject({ status: "executed" });
+      expect(JSON.parse(sourceResult.content[0]?.type === "text" ? sourceResult.content[0].text : "{}")).toMatchObject({ status: "executed" });
+      expect(JSON.parse(linkResult.content[0]?.type === "text" ? linkResult.content[0].text : "{}")).toMatchObject({ status: "executed" });
+      expect(JSON.parse(logResult.content[0]?.type === "text" ? logResult.content[0].text : "{}")).toMatchObject({ status: "executed" });
+      expect(JSON.parse(auditResult.content[0]?.type === "text" ? auditResult.content[0].text : "{}").events).toEqual(expect.arrayContaining([expect.objectContaining({ operation: "core.plan", surface: "mcp" })]));
+      const auditEvents = JSON.parse(auditResult.content[0]?.type === "text" ? auditResult.content[0].text : "{}").events as Array<{ operation: string; surface: string; affectedIds: string[] }>;
+      for (const [intent, count] of [["capture", 3], ["update", 2], ["append", 2], ["source_add", 2], ["source_link", 2], ["log", 2]] as const) {
+        expect(auditEvents.filter((event) => event.operation === "core.plan" && event.surface === "mcp" && event.affectedIds.includes(intent))).toHaveLength(count);
+      }
       expect(JSON.parse(coreMalformedResult.content[0]?.type === "text" ? coreMalformedResult.content[0].text : "{}")).toMatchObject({ ok: false, error: { code: "invalid_input" } });
       expect(JSON.parse(coreCrossedResult.content[0]?.type === "text" ? coreCrossedResult.content[0].text : "{}")).toMatchObject({ status: "error", error: { code: "not_allowlisted" } });
       expect(JSON.parse(configCoreResult.content[0]?.type === "text" ? configCoreResult.content[0].text : "{}")).toMatchObject({ status: "error", error: { code: "not_allowlisted" } });
@@ -142,7 +175,7 @@ async function createWorkspace(config: { wikiPath: string }): Promise<string> {
   await mkdir(workspacePath, { recursive: true });
   await writeFile(
     path.join(workspacePath, "thoth.config.json"),
-    JSON.stringify(config),
+    JSON.stringify({ ...config, audit: { enabled: true, path: "audit.jsonl" } }),
     "utf8",
   );
 

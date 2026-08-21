@@ -1,4 +1,5 @@
-import { executePlan, planIntent } from "./runtime.js";
+import { executePlan, planIntentAudited } from "./runtime.js";
+import type { AuditSurface } from "../audit/index.js";
 import type { ResolvedThothConfig } from "./config.js";
 import type { CoreErrorCode, CoreResult } from "./types.js";
 
@@ -30,10 +31,10 @@ export class CoreQueryError extends Error {
 }
 
 /** Shared compatibility adapter for the legacy CLI/MCP search surfaces. */
-export async function queryThroughCore(config: ResolvedThothConfig, input: QueryAdapterInput): Promise<QuerySummary[]> {
-  const plan = planIntent(config, { intent: "query", input });
+export async function queryThroughCore(config: ResolvedThothConfig, input: QueryAdapterInput, surface: AuditSurface = "core"): Promise<QuerySummary[]> {
+  const plan = await planIntentAudited(config, { intent: "query", input }, surface);
   if (plan.status === "error") throw fromCoreError(plan.error, input);
-  const result = await executePlan(config, plan);
+  const result = await executePlan(config, plan, { surface });
   if (!result.ok) throw fromCoreError(result.error, input);
   return extractQueryResults(result);
 }

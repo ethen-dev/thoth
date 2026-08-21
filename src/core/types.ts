@@ -31,6 +31,7 @@ export type ThothPlan = {
   intent: string;
   steps: PlanStep[];
   confirmationRequired: boolean;
+  confirmationToken?: string;
   status: "planned" | "error";
   error?: CoreError;
 };

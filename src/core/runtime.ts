@@ -1,11 +1,12 @@
 import { z } from "zod/v4";
+import { createHash } from "node:crypto";
 import {
   addWikiSourceDocument, appendLogEntry, appendWikiDocument, captureWikiDocument,
   getWikiDocumentById, listWikiDocuments, lintWikiDocuments, relateWikiDocuments,
   rebuildWikiIndex, updateWikiDocument, linkWikiSourceDocument,
 } from "../actions/index.js";
 import { runSkill } from "../skills/runtime.js";
-import { recordAudit } from "../audit/index.js";
+import { recordAudit, type AuditSurface } from "../audit/index.js";
 import { planConfigMutation } from "./internal-config-mutation.js";
 import type { ResolvedThothConfig } from "./config.js";
 import { coreIntents, maxCorePlanSteps, type CoreAction, type CoreError, type CoreResult, type IntentRequest, type PlanStep, type ThothPlan } from "./types.js";
@@ -35,32 +36,51 @@ export function planIntent(_config: ResolvedThothConfig, request: IntentRequest)
   const input = validateStepInput(intent, request.input, expected);
   if (input.error) return { ...base, status: "error", error: input.error };
   const step: PlanStep = { id: "step-1", action: expected, input: input.value, write: writeActions.has(expected), summary: intent === "query" ? "Progressive wiki retrieval (summaries only)" : `${intent} through the local wiki handler` };
-  return { ...base, steps: [step], confirmationRequired: step.write };
+  const plan = { ...base, steps: [step], confirmationRequired: step.write };
+  return step.write ? { ...plan, confirmationToken: tokenForPlan(plan) } : plan;
+}
+
+/** Public planning entry point for surfaces that need a planning audit. */
+export async function planIntentAudited(config: ResolvedThothConfig, request: IntentRequest, surface: AuditSurface): Promise<ThothPlan> {
+  const started = Date.now();
+  const plan = planIntent(config, request);
+  await recordAudit(config, {
+    operation: "core.plan",
+    surface,
+    actor: config.audit?.actor ?? "system",
+    result: plan.status === "error" ? "rejected" : "planned",
+    affectedIds: typeof request.intent === "string" ? [request.intent] : [],
+    durationMs: Date.now() - started,
+    error: plan.error ? { code: plan.error.code, message: plan.error.message } : undefined,
+  });
+  return plan;
 }
 
 /** Validates the complete untrusted plan before reading any step fields. */
-export async function executePlan(config: ResolvedThothConfig, candidate: unknown, options: { confirmed?: boolean } = {}): Promise<CoreResult> {
+export async function executePlan(config: ResolvedThothConfig, candidate: unknown, options: { confirmed?: boolean; confirmationToken?: string; surface?: AuditSurface } = {}): Promise<CoreResult> {
   const started = Date.now();
+  const surface = options.surface ?? "core";
   const checked = validatePlan(candidate);
-  if (!checked.ok) { const result = { ok: false, status: "error" as const, intent: checked.intent, error: checked.error }; await auditCore(config, "rejection", result, started); return result; }
+  if (!checked.ok) { const result = { ok: false, status: "error" as const, intent: checked.intent, error: checked.error }; await auditCore(config, "rejection", result, started, surface); return result; }
   const plan = checked.plan;
   const writes = plan.steps.filter((step) => step.write);
-  if (writes.length > 1) { const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("non_atomic_plan", "Plans with more than one write are not supported") }; await auditCore(config, "rejection", result, started); return result; }
-  if (plan.confirmationRequired !== (writes.length > 0)) { const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("invalid_input", "confirmationRequired does not match plan writes") }; await auditCore(config, "rejection", result, started); return result; }
-  if (writes.length > 0 && !options.confirmed) { const result = { ok: true, status: "proposal" as const, intent: plan.intent, plan, error: coreError("confirmation_required", "Confirmation is required before writing") }; await auditCore(config, "proposal", result, started); return result; }
+  if (writes.length > 1) { const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("non_atomic_plan", "Plans with more than one write are not supported") }; await auditCore(config, "rejection", result, started, surface); return result; }
+  if (plan.confirmationRequired !== (writes.length > 0)) { const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("invalid_input", "confirmationRequired does not match plan writes") }; await auditCore(config, "rejection", result, started, surface); return result; }
+  if (writes.length > 0 && options.confirmationToken !== undefined && options.confirmationToken !== plan.confirmationToken) { const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("confirmation_required", "Confirmation token does not match the plan") }; await auditCore(config, "rejection", result, started, surface); return result; }
+  if (writes.length > 0 && !options.confirmed && options.confirmationToken !== plan.confirmationToken) { const result = { ok: true, status: "proposal" as const, intent: plan.intent, plan, error: coreError("confirmation_required", "Confirmation is required before writing") }; await auditCore(config, "proposal", result, started, surface); return result; }
   try {
     const results: unknown[] = [];
     for (const step of plan.steps) results.push(await executeStep(config, step));
-    const result = { ok: true, status: "executed" as const, intent: plan.intent, results }; await auditCore(config, "executed", result, started); return result;
+    const result = { ok: true, status: "executed" as const, intent: plan.intent, results }; await auditCore(config, "executed", result, started, surface); return result;
   } catch (cause) {
-    const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("execution_error", cause instanceof Error ? cause.message : String(cause)) }; await auditCore(config, "error", result, started); return result;
+    const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("execution_error", cause instanceof Error ? cause.message : String(cause)) }; await auditCore(config, "error", result, started, surface); return result;
   }
 }
 
 function validatePlan(candidate: unknown): { ok: true; plan: ThothPlan } | { ok: false; intent: string; error: CoreError } {
   const schema = z.object({
     version: z.literal(1), intent: z.string().min(1), steps: z.array(z.object({ id: z.string().min(1), action: z.string().min(1), input: z.unknown(), write: z.boolean(), summary: z.string() }).strict()).min(1).max(maxCorePlanSteps),
-    confirmationRequired: z.boolean(), status: z.literal("planned"), error: z.never().optional(),
+    confirmationRequired: z.boolean(), confirmationToken: z.string().min(1).optional(), status: z.literal("planned"), error: z.never().optional(),
   }).strict();
   const parsed = schema.safeParse(candidate);
   if (!parsed.success) {
@@ -78,7 +98,13 @@ function validatePlan(candidate: unknown): { ok: true; plan: ThothPlan } | { ok:
     const input = validateStepInput(intent, step.input, step.action as CoreAction);
     if (input.error) return { ok: false, intent, error: input.error };
   }
+  if (parsed.data.confirmationToken !== undefined && parsed.data.confirmationToken !== tokenForPlan(parsed.data as ThothPlan)) return { ok: false, intent, error: coreError("invalid_input", "Confirmation token does not match plan") };
   return { ok: true, plan: parsed.data as ThothPlan };
+}
+
+function tokenForPlan(plan: Omit<ThothPlan, "confirmationToken"> | ThothPlan): string {
+  const { confirmationToken: _token, ...unsigned } = plan as ThothPlan;
+  return createHash("sha256").update(JSON.stringify(unsigned)).digest("hex").slice(0, 24);
 }
 
 async function executeStep(config: ResolvedThothConfig, step: PlanStep): Promise<unknown> {
@@ -120,6 +146,6 @@ function validateStepInput(intent: string, value: unknown, action: CoreAction): 
 }
 function coreError(code: CoreError["code"], message: string, details?: unknown): CoreError { return { code, message, ...(details === undefined ? {} : { details }) }; }
 
-async function auditCore(config: ResolvedThothConfig, result: "proposal" | "rejection" | "executed" | "error", value: CoreResult, started: number): Promise<void> {
-  await recordAudit(config, { operation: `core.${result}`, surface: "core", actor: config.audit?.actor ?? "system", result: result === "proposal" ? "proposed" : result === "rejection" ? "rejected" : result, affectedIds: [value.intent], durationMs: Date.now() - started, error: value.error ? { code: value.error.code, message: value.error.message } : undefined });
+async function auditCore(config: ResolvedThothConfig, result: "proposal" | "rejection" | "executed" | "error", value: CoreResult, started: number, surface: AuditSurface): Promise<void> {
+  await recordAudit(config, { operation: `core.${result}`, surface, actor: config.audit?.actor ?? "system", result: result === "proposal" ? "proposed" : result === "rejection" ? "rejected" : result, affectedIds: [value.intent], durationMs: Date.now() - started, error: value.error ? { code: value.error.code, message: value.error.message } : undefined });
 }

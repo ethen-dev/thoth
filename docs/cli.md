@@ -8,13 +8,16 @@ usa Markdown como fuente de verdad; los índices son derivados.
 ### Core estructurado
 
 - `thoth core plan --input '<IntentRequest JSON>'`
-- `thoth core execute --input '<ThothPlan JSON>' [--confirmed]`
+- `thoth core execute --input '<ThothPlan JSON>' [--confirmed] [--token <token>]`
 
 Ambos imprimen JSON. El segundo devuelve una propuesta para escrituras sin
 `--confirmed`; los errores tienen código de salida 1. `query` no permite
 `show` ni contenido completo; usa `core plan` con intent `show` y un id
-seleccionado para ello. Los comandos CLI
-anteriores siguen disponibles sin cambios.
+seleccionado para ello. Las lecturas `list`, `show`, `lint` y `source list/show`,
+y las escrituras `capture`, `update`, `append`, `log` y `source add/link`, pasan
+por el Core. Las escrituras muestran una propuesta por defecto; usa
+`--confirmed` y el token de la propuesta para ejecutarlas. Nunca mutan
+silenciosamente.
 
 ### Workspace
 
@@ -50,9 +53,8 @@ normalizado. `capture` recibe contenido textual directo; no implementa `--file` 
 requieren `--project` y un proyecto existente. `show` ofrece `--raw` y
 `--metadata`; no existe `--summary`.
 
-`search` es la única superficie CLI migrada en este slice: usa el intent Core
-`query` mediante un adaptador compartido y conserva su salida textual y código
-de error. Las demás superficies CLI siguen legacy.
+`search` mantiene su adapter y contrato legacy. `relate`, `index`, `sync-links`,
+`init`, `status` y `doctor` permanecen fuera de esta migración.
 
 Los tipos documentales válidos son: `project`, `note`, `idea`, `decision`,
 `implementation`, `session`, `log`, `research`, `source`, `entity`,

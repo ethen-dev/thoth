@@ -30,10 +30,10 @@ import {
   validWikiDocumentTypes,
   validWikiRelationTypes,
 } from "../actions/index.js";
-import { executePlan, loadConfig, planIntent, type IntentRequest, type ThothPlan } from "../core/index.js";
+import { executePlan, loadConfig, planIntentAudited, listThroughCore, showThroughCore, lintThroughCore, sourceListThroughCore, sourceShowThroughCore, writeThroughCore, type IntentRequest, type ThothPlan } from "../core/index.js";
 import { discoverSkills, getSkill, runSkill, validateSkills } from "../skills/index.js";
 import { formatCliSearch, runCliSearch } from "./search.js";
-import { listAuditEvents, recordAudit, validateAuditLimit, verifyAudit } from "../audit/index.js";
+import { listAuditEvents, validateAuditLimit, verifyAudit } from "../audit/index.js";
 
 const thothVersion = "0.6.0";
 const program = new Command();
@@ -51,16 +51,15 @@ core.command("plan").requiredOption("--input <json>", "IntentRequest JSON").acti
   try {
     const request = parseJson<IntentRequest>(options.input);
     const config = await loadConfig();
-    const plan = planIntent(config, request);
-    await recordAudit(config, { operation: "core.plan", surface: "cli", actor: config.audit?.actor ?? "system", result: plan.status === "error" ? "rejected" : "planned", affectedIds: typeof request.intent === "string" ? [request.intent] : [], durationMs: 0, error: plan.error ? { code: plan.error.code, message: plan.error.message } : undefined });
+     const plan = await planIntentAudited(config, request, "cli");
     console.log(JSON.stringify(plan, null, 2));
     if (plan.status === "error") process.exitCode = 1;
   } catch (error) { reportCoreError(error); }
 });
-core.command("execute").requiredOption("--input <json>", "ThothPlan JSON").option("--confirmed", "Allow write steps").action(async (options: { input: string; confirmed?: boolean }) => {
+core.command("execute").requiredOption("--input <json>", "ThothPlan JSON").option("--confirmed", "Allow write steps").option("--token <token>", "Confirmation token").action(async (options: { input: string; confirmed?: boolean; token?: string }) => {
   try {
     const plan = parseJson<ThothPlan>(options.input);
-    const result = await executePlan(await loadConfig(), plan, { confirmed: options.confirmed });
+    const result = await executePlan(await loadConfig(), plan, { confirmed: options.confirmed, confirmationToken: options.token, surface: "cli" });
     console.log(JSON.stringify(result, null, 2));
     if (!result.ok) process.exitCode = 1;
   } catch (error) { reportCoreError(error); }
@@ -117,7 +116,7 @@ program
   .action(async (options: { type?: string; status?: string; tag?: string }) => {
     try {
       const config = await loadConfig();
-      const documents = await listWikiDocuments(config, options);
+       const documents = await listThroughCore(config, options, "cli") as Awaited<ReturnType<typeof listWikiDocuments>>;
 
       if (documents.length === 0) {
         console.log("No wiki documents found.");
@@ -147,23 +146,21 @@ program
     ) => {
       try {
         const config = await loadConfig();
-        const document = await getWikiDocumentById(config, id);
+         const document = await showThroughCore(config, id, options.raw ? "raw" : options.metadata ? "metadata" : "content", "cli") as Awaited<ReturnType<typeof getWikiDocumentById>> | { raw?: string; metadata?: unknown };
 
-        if (!document) {
-          throw new Error(`Document not found: ${id}`);
-        }
+         if (!document) throw new Error(`Document not found: ${id}`);
 
         if (options.raw) {
-          console.log(document.raw);
+           console.log((document as { raw: string }).raw);
           return;
         }
 
         if (options.metadata) {
-          console.log(JSON.stringify(document.metadata, null, 2));
+           console.log(JSON.stringify((document as { metadata: unknown }).metadata, null, 2));
           return;
         }
 
-        console.log(document.content.trimEnd());
+         console.log((document as { content: string }).content.trimEnd());
       } catch (error) {
         reportError(error);
       }
@@ -179,6 +176,8 @@ program
   .option("--status <status>", "Document status")
   .option("--project <id>", "Project id (required for tasks)")
   .option("--tag <tag>", "Document tag. Can be used multiple times", collectValues, [])
+  .option("--confirmed", "Confirm the proposed mutation")
+  .option("--token <token>", "Confirmation token")
   .action(
     async (
       content: string,
@@ -187,23 +186,28 @@ program
         title?: string;
         status?: string;
         tag?: string[];
-        project?: string;
+         project?: string;
+         confirmed?: boolean;
+         token?: string;
       },
     ) => {
       try {
         const config = await loadConfig();
-        const result = await captureWikiDocument(config, {
+         const result = await writeThroughCore(config, { intent: "capture", input: {
           content,
           title: options.title,
           type: options.type,
           status: options.status,
           tags: options.tag,
           projectId: options.project,
-        });
+          } }, { confirmed: options.confirmed, confirmationToken: options.token, surface: "cli" });
+         if (result.status === "proposal") { printWriteProposal(result); return; }
+         if (!result.ok) throw new Error(result.error?.message ?? "Capture failed");
+         const created = result.results?.[0] as { id: string; path: string; created: boolean };
 
-        console.log(`Document: ${result.id}`);
-        console.log(`Path: ${result.path}`);
-        console.log(`Status: ${result.created ? "created" : "exists"}`);
+         console.log(`Document: ${created.id}`);
+         console.log(`Path: ${created.path}`);
+         console.log(`Status: ${created.created ? "created" : "exists"}`);
       } catch (error) {
         reportError(error);
       }
@@ -216,23 +220,28 @@ program
   .argument("<id>", "Document id")
   .argument("<content>", "Content to append")
   .option("--section <section>", "Section heading", "Notes")
+  .option("--confirmed", "Confirm the proposed mutation")
+  .option("--token <token>", "Confirmation token")
   .action(
     async (
       id: string,
       content: string,
-      options: { section: string },
+         options: { section: string; confirmed?: boolean; token?: string },
     ) => {
       try {
         const config = await loadConfig();
-        const result = await appendWikiDocument(config, {
+         const result = await writeThroughCore(config, { intent: "append", input: {
           id,
           content,
           section: options.section,
-        });
+          } }, { confirmed: options.confirmed, confirmationToken: options.token, surface: "cli" });
+         if (result.status === "proposal") { printWriteProposal(result); return; }
+         if (!result.ok) throw new Error(result.error?.message ?? "Append failed");
+         const appended = result.results?.[0] as { id: string; path: string; section: string };
 
-        console.log(`Document: ${result.id}`);
-        console.log(`Path: ${result.path}`);
-        console.log(`Section: ${result.section}`);
+         console.log(`Document: ${appended.id}`);
+         console.log(`Path: ${appended.path}`);
+         console.log(`Section: ${appended.section}`);
       } catch (error) {
         reportError(error);
       }
@@ -246,24 +255,29 @@ program
   .option("--kind <kind>", `Log kind (${validLogKinds.join(", ")})`)
   .option("--project <id>", "Project id to also append to its timeline")
   .option("--ref <id>", "Referenced document id")
+  .option("--confirmed", "Confirm the proposed mutation")
+  .option("--token <token>", "Confirmation token")
   .action(
     async (
       content: string,
-      options: { kind?: string; project?: string; ref?: string },
+         options: { kind?: string; project?: string; ref?: string; confirmed?: boolean; token?: string },
     ) => {
       try {
         const config = await loadConfig();
-        const result = await appendLogEntry(config, {
+         const result = await writeThroughCore(config, { intent: "log", input: {
           content,
           kind: options.kind,
           projectId: options.project,
           ref: options.ref,
-        });
+          } }, { confirmed: options.confirmed, confirmationToken: options.token, surface: "cli" });
+         if (result.status === "proposal") { printWriteProposal(result); return; }
+         if (!result.ok) throw new Error(result.error?.message ?? "Log failed");
+         const logged = result.results?.[0] as { globalPath: string; timelinePath?: string };
 
-        console.log(`Global log: ${result.globalPath}`);
+         console.log(`Global log: ${logged.globalPath}`);
 
-        if (result.timelinePath) {
-          console.log(`Timeline: ${result.timelinePath}`);
+         if (logged.timelinePath) {
+           console.log(`Timeline: ${logged.timelinePath}`);
         }
 
         if (options.project) {
@@ -360,7 +374,7 @@ program
   .action(async () => {
     try {
       const config = await loadConfig();
-      const result = await lintWikiDocuments(config);
+       const result = await lintThroughCore(config, "cli") as Awaited<ReturnType<typeof lintWikiDocuments>>;
 
       console.log(`Documents checked: ${result.documentsChecked}`);
 
@@ -405,6 +419,8 @@ program
   .option("--type <type>", `${documentTypeHelp}; cannot convert documents to or from source`)
   .option("--status <status>", "Document status")
   .option("--tag <tag>", "Tag to append. Can be used multiple times", collectValues, [])
+  .option("--confirmed", "Confirm the proposed mutation")
+  .option("--token <token>", "Confirmation token")
   .action(
     async (
       id: string,
@@ -412,25 +428,30 @@ program
         title?: string;
         type?: string;
         status?: string;
-        tag?: string[];
+         tag?: string[];
+         confirmed?: boolean;
+         token?: string;
       },
     ) => {
       try {
         const config = await loadConfig();
-        const result = await updateWikiDocument(config, {
+         const result = await writeThroughCore(config, { intent: "update", input: {
           id,
           title: options.title,
           type: options.type,
           status: options.status,
           tags: options.tag,
-        });
+          } }, { confirmed: options.confirmed, confirmationToken: options.token, surface: "cli" });
+         if (result.status === "proposal") { printWriteProposal(result); return; }
+         if (!result.ok) throw new Error(result.error?.message ?? "Update failed");
+         const updated = result.results?.[0] as { id: string; path: string; title: string; type: string; status: string; tags: string[] };
 
-        console.log(`Document: ${result.id}`);
-        console.log(`Path: ${result.path}`);
-        console.log(`Title: ${result.title}`);
-        console.log(`Type: ${result.type}`);
-        console.log(`Status: ${result.status}`);
-        console.log(`Tags: ${result.tags.length > 0 ? result.tags.join(", ") : "none"}`);
+         console.log(`Document: ${updated.id}`);
+         console.log(`Path: ${updated.path}`);
+         console.log(`Title: ${updated.title}`);
+         console.log(`Type: ${updated.type}`);
+         console.log(`Status: ${updated.status}`);
+         console.log(`Tags: ${updated.tags.length > 0 ? updated.tags.join(", ") : "none"}`);
       } catch (error) {
         reportError(error);
       }
@@ -480,24 +501,29 @@ source
   .option("--id <id>", "Source id (must match source-<slug>)")
   .option("--status <status>", "Source status")
   .option("--tag <tag>", "Source tag. Can be used multiple times", collectValues, [])
+  .option("--confirmed", "Confirm the proposed mutation")
+  .option("--token <token>", "Confirmation token")
   .action(
     async (
       content: string,
-      options: { title: string; id?: string; status?: string; tag?: string[] },
+       options: { title: string; id?: string; status?: string; tag?: string[]; confirmed?: boolean; token?: string },
     ) => {
       try {
         const config = await loadConfig();
-        const result = await addWikiSourceDocument(config, {
+         const result = await writeThroughCore(config, { intent: "source_add", input: {
           content,
           title: options.title,
           id: options.id,
           status: options.status,
           tags: options.tag,
-        });
+          } }, { confirmed: options.confirmed, confirmationToken: options.token, surface: "cli" });
+         if (result.status === "proposal") { printWriteProposal(result); return; }
+         if (!result.ok) throw new Error(result.error?.message ?? "Source add failed");
+         const added = result.results?.[0] as { id: string; path: string; created: boolean };
 
-        console.log(`Source: ${result.id}`);
-        console.log(`Path: ${result.path}`);
-        console.log(`Status: ${result.created ? "created" : "exists"}`);
+         console.log(`Source: ${added.id}`);
+         console.log(`Path: ${added.path}`);
+         console.log(`Status: ${added.created ? "created" : "exists"}`);
       } catch (error) {
         reportError(error);
       }
@@ -512,7 +538,7 @@ source
   .action(async (options: { status?: string; tag?: string }) => {
     try {
       const config = await loadConfig();
-      const documents = await listWikiDocuments(config, { ...options, type: "source" });
+       const documents = await sourceListThroughCore(config, options, "cli") as Awaited<ReturnType<typeof listWikiDocuments>>;
 
       if (documents.length === 0) {
         console.log("No source documents found.");
@@ -542,27 +568,21 @@ source
     ) => {
       try {
         const config = await loadConfig();
-        const document = await getWikiDocumentById(config, id);
+         const document = await sourceShowThroughCore(config, id, options.raw ? "raw" : options.metadata ? "metadata" : "content", "cli") as Awaited<ReturnType<typeof getWikiDocumentById>> | { raw?: string; metadata?: unknown };
 
-        if (!document) {
-          throw new Error(`Source document not found: ${id}`);
-        }
-
-        if (document.type !== "source") {
-          throw new Error(`Document is not a source: ${id}`);
-        }
+         if (!document) throw new Error(`Source document not found: ${id}`);
 
         if (options.raw) {
-          console.log(document.raw);
+           console.log((document as { raw: string }).raw);
           return;
         }
 
         if (options.metadata) {
-          console.log(JSON.stringify(document.metadata, null, 2));
+           console.log(JSON.stringify((document as { metadata: unknown }).metadata, null, 2));
           return;
         }
 
-        console.log(document.content.trimEnd());
+         console.log((document as { content: string }).content.trimEnd());
       } catch (error) {
         reportError(error);
       }
@@ -574,15 +594,20 @@ source
   .description("Link a source to a derived document")
   .argument("<source-id>", "Source document id")
   .argument("<document-id>", "Derived document id")
-  .action(async (sourceId: string, documentId: string) => {
+  .option("--confirmed", "Confirm the proposed mutation")
+  .option("--token <token>", "Confirmation token")
+  .action(async (sourceId: string, documentId: string, options: { confirmed?: boolean; token?: string }) => {
     try {
       const config = await loadConfig();
-      const result = await linkWikiSourceDocument(config, sourceId, documentId);
+       const result = await writeThroughCore(config, { intent: "source_link", input: { sourceId, targetId: documentId } }, { confirmed: options.confirmed, confirmationToken: options.token, surface: "cli" });
+      if (result.status === "proposal") { printWriteProposal(result); return; }
+      if (!result.ok) throw new Error(result.error?.message ?? "Source link failed");
+      const linked = result.results?.[0] as { source: string; target: string; sourceRelation: { created: boolean }; targetRelation: { created: boolean } };
 
-      console.log(`Source: ${result.source}`);
-      console.log(`Document: ${result.target}`);
-      console.log(`Source relation: ${result.sourceRelation.created ? "created" : "exists"}`);
-      console.log(`Document relation: ${result.targetRelation.created ? "created" : "exists"}`);
+      console.log(`Source: ${linked.source}`);
+      console.log(`Document: ${linked.target}`);
+      console.log(`Source relation: ${linked.sourceRelation.created ? "created" : "exists"}`);
+      console.log(`Document relation: ${linked.targetRelation.created ? "created" : "exists"}`);
     } catch (error) {
       reportError(error);
     }
@@ -745,6 +770,12 @@ function reportCoreError(error: unknown): never {
 
 function parseJson<T>(value: string): T {
   try { return JSON.parse(value) as T; } catch { throw new Error("--input must be valid JSON"); }
+}
+
+function printWriteProposal(result: { plan?: ThothPlan; error?: { message: string } }): void {
+  console.log("Proposal: confirmation required; no changes were made.");
+  if (result.plan?.confirmationToken) console.log(`Confirmation token: ${result.plan.confirmationToken}`);
+  console.log(result.error?.message ?? "Confirmation is required before writing");
 }
 
 function collectValues(value: string, previous: string[]): string[] {

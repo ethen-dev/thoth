@@ -12,11 +12,13 @@ Los intents `list`, `show`, `capture`, `update`, `append`, `relate`, `log`,
 `index`, `lint`, `source_add` y `source_link` tienen acciones únicas; una acción cruzada se rechaza. Los
 planes se validan completamente antes de ejecutarse. Un plan con más de una
 escritura devuelve `non_atomic_plan`; las escrituras individuales requieren
-`confirmed: true` y sin confirmación devuelven `confirmation_required`.
+`confirmed: true` o el `confirmationToken` exacto de la propuesta; sin ninguno
+devuelven `confirmation_required`.
 Un plan admite como máximo 20 pasos; superar ese límite devuelve
 `plan_too_large` antes de ejecutar cualquier paso.
-`core_plan`/`core_execute` son la ruta estructurada provider-agnostic, no una
-garantía global: la CLI y MCP legacy siguen existiendo sin estar migradas.
+`core_plan` registra un único evento `core.plan` con superficie `cli` o `mcp`.
+Los adapters no auditan por separado; `executePlan` registra propuesta y
+resultado, evitando duplicación en lecturas como `wiki_search`.
 `wiki_show` y los resources MCP son excepciones intencionales de lectura y
 pueden devolver `content`, `raw` o `metadata` cuando se solicitan explícitamente.
 
