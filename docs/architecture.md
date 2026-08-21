@@ -38,7 +38,8 @@ Responsabilidades iniciales:
 - planificar intents explícitos (`query`, `list`, `show`, `capture`, `update`,
   `append`, `relate`, `log`, `index`, `lint`, `source_add`, `source_link`,
   `clarify`, `ignore`)
-- ejecutar handlers locales de lectura y propuestas de escritura
+  - ejecutar handlers locales de lectura y propuestas de escritura
+  - inicializar la wiki mediante lock, preservación, idempotencia y rollback
 - recuperar consultas progresivamente mediante la skill `wiki-query`, limitada
   a candidatos y snippets
 
@@ -51,8 +52,9 @@ de propuesta, rechazo, ejecución y error.
 
 CLI y MCP conservan nombres y formatos mediante adapters. `query/wiki_search`
 mantiene su búsqueda resumida y produce un único evento de ejecución del Core.
-`relate`, `index`, `sync-links`, `init`, `status` y `doctor` permanecen fuera de
-esta migración.
+`relate` y `sync-links` usan ahora el Core. `sync-links` admite plan/execute,
+token y dry-run; `relate` solo incluye sincronización derivada cuando
+`syncLinks: true` está explícito.
 
 Las mutaciones single-file usan escritura temporal en el mismo directorio,
 preservan los permisos existentes (o usan un modo definido para archivos

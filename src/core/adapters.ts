@@ -2,6 +2,7 @@ import { executePlan, planIntentAudited } from "./runtime.js";
 import type { AuditSurface } from "../audit/index.js";
 import type { ResolvedThothConfig } from "./config.js";
 import type { CoreResult, IntentRequest } from "./types.js";
+import type { WikiDoctorResult, WikiStatus } from "../actions/index.js";
 
 /** Compatibility boundary: Core owns execution and audit; adapters only shape results. */
 export async function readThroughCore(config: ResolvedThothConfig, request: IntentRequest, surface: AuditSurface = "core"): Promise<unknown> {
@@ -33,6 +34,18 @@ export async function showThroughCore(config: ResolvedThothConfig, id: string, m
 
 export async function lintThroughCore(config: ResolvedThothConfig, surface: AuditSurface = "core") {
   return readThroughCore(config, { intent: "lint", input: {} }, surface);
+}
+
+export async function statusThroughCore(config: ResolvedThothConfig, surface: AuditSurface = "core"): Promise<WikiStatus> {
+  return readThroughCore(config, { intent: "status", input: {} }, surface) as Promise<WikiStatus>;
+}
+
+export async function doctorThroughCore(config: ResolvedThothConfig, surface: AuditSurface = "core"): Promise<WikiDoctorResult> {
+  return readThroughCore(config, { intent: "doctor", input: {} }, surface) as Promise<WikiDoctorResult>;
+}
+
+export async function initThroughCore(config: ResolvedThothConfig, options: { dryRun?: boolean; confirmed?: boolean; confirmationToken?: string } = {}, surface: AuditSurface = "core") {
+  return writeThroughCore(config, { intent: "init", input: { dryRun: options.dryRun } }, { ...options, surface });
 }
 
 export async function sourceListThroughCore(config: ResolvedThothConfig, input: Record<string, unknown> = {}, surface: AuditSurface = "core") {

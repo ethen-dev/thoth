@@ -6,14 +6,12 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod/v4";
 import {
   getWikiDocumentById,
-  relateWikiDocuments,
-  rebuildWikiIndex,
   validLogKinds,
   validWikiCaptureDocumentTypes,
   validWikiDocumentTypes,
   validWikiRelationTypes,
 } from "../actions/index.js";
-import { executePlan, loadConfig, planIntentAudited, queryThroughCore, listThroughCore, showThroughCore, lintThroughCore, writeThroughCore, sourceListThroughCore, sourceShowThroughCore } from "../core/index.js";
+import { executePlan, loadConfig, planIntentAudited, queryThroughCore, listThroughCore, showThroughCore, lintThroughCore, statusThroughCore, doctorThroughCore, initThroughCore, writeThroughCore, sourceListThroughCore, sourceShowThroughCore } from "../core/index.js";
 import { discoverSkills, getSkill, runSkill, validateSkills } from "../skills/index.js";
 import { listAuditEvents } from "../audit/index.js";
 
@@ -97,7 +95,7 @@ export function createThothMcpServer(): McpServer {
     }),
   );
 
-  server.registerTool(
+   server.registerTool(
     "wiki_search",
     {
       title: "Search Wiki",
@@ -109,7 +107,7 @@ export function createThothMcpServer(): McpServer {
         tag: z.string().optional(),
         limit: z.number().int().min(1).max(20).default(20),
       },
-      annotations: {
+       annotations: {
         readOnlyHint: true,
         idempotentHint: true,
       },
@@ -187,6 +185,12 @@ export function createThothMcpServer(): McpServer {
          content: document.content,
        });
     },
+  );
+
+  server.registerTool(
+    "wiki_init",
+    { title: "Initialize Wiki", description: "Plan and initialize the wiki without overwriting existing files.", inputSchema: { dryRun: z.boolean().optional(), confirmed: z.boolean().optional(), confirmationToken: z.string().min(1).optional() }, annotations: { readOnlyHint: false, idempotentHint: true } },
+    async (input) => jsonResult(await initThroughCore(await loadConfig(), input, "mcp")),
   );
 
   server.registerTool(
@@ -276,22 +280,34 @@ async (input) => jsonResult(await sourceShowThroughCore(await loadConfig(), inpu
     "wiki_relate",
     {
       title: "Relate Wiki Documents",
-      description: "Create a relation from one existing wiki document to another.",
+       description: "Plan and execute a relation; derived link synchronization is opt-in and atomic.",
       inputSchema: {
         sourceId: z.string().min(1),
         targetId: z.string().min(1),
-        relation: z.enum(validWikiRelationTypes),
+          relation: z.enum(validWikiRelationTypes),
+          syncLinks: z.boolean().optional(),
+         confirmed: z.boolean().optional(),
+         confirmationToken: z.string().min(1).optional(),
       },
       annotations: {
         readOnlyHint: false,
-        idempotentHint: true,
       },
     },
     async (input) => {
       const config = await loadConfig();
-      const result = await relateWikiDocuments(config, input);
+      const { confirmed, confirmationToken, ...payload } = input;
+      const result = await writeThroughCore(config, { intent: "relate", input: payload }, { confirmed, confirmationToken, surface: "mcp" });
 
       return jsonResult(result);
+    },
+  );
+
+  server.registerTool(
+    "wiki_sync_links",
+    { title: "Sync Wiki Relation Links", description: "Plan and execute derived Markdown relation links atomically.", inputSchema: { dryRun: z.boolean().optional(), confirmed: z.boolean().optional(), confirmationToken: z.string().min(1).optional() }, annotations: { readOnlyHint: false, idempotentHint: true } },
+    async (input) => {
+      const { confirmed, confirmationToken, ...payload } = input;
+      return jsonResult(await writeThroughCore(await loadConfig(), { intent: "sync_links", input: payload }, { confirmed, confirmationToken, surface: "mcp" }));
     },
   );
 
@@ -299,17 +315,17 @@ async (input) => jsonResult(await sourceShowThroughCore(await loadConfig(), inpu
     "wiki_index",
     {
       title: "Rebuild Wiki Index",
-      description: "Rebuild derived wiki index files.",
+       description: "Rebuild derived wiki index files.",
+       inputSchema: { human: z.boolean().optional(), dryRun: z.boolean().optional(), curated: z.boolean().optional(), categoryPages: z.boolean().optional(), type: z.enum(validWikiDocumentTypes).optional(), maxPerSection: z.number().int().min(0).optional(), confirmed: z.boolean().optional(), confirmationToken: z.string().min(1).optional() },
       annotations: {
         readOnlyHint: false,
         idempotentHint: true,
       },
     },
-    async () => {
+     async (input) => {
       const config = await loadConfig();
-      const result = await rebuildWikiIndex(config);
-
-      return jsonResult(result);
+      const { confirmed, confirmationToken, ...payload } = input;
+      return jsonResult(await writeThroughCore(config, { intent: "index", input: payload }, { confirmed, confirmationToken, surface: "mcp" }));
     },
   );
 
@@ -329,6 +345,18 @@ async (input) => jsonResult(await sourceShowThroughCore(await loadConfig(), inpu
 
       return jsonResult(result);
     },
+  );
+
+  server.registerTool(
+    "wiki_status",
+    { title: "Show Workspace Status", description: "Read workspace status without changing files.", inputSchema: z.object({}).strict(), annotations: { readOnlyHint: true, idempotentHint: true } },
+    async () => jsonResult(await statusThroughCore(await loadConfig(), "mcp")),
+  );
+
+  server.registerTool(
+    "wiki_doctor",
+    { title: "Diagnose Wiki", description: "Diagnose workspace and wiki health without rebuilding indexes or writing files.", inputSchema: z.object({}).strict(), annotations: { readOnlyHint: true, idempotentHint: true } },
+    async () => jsonResult(await doctorThroughCore(await loadConfig(), "mcp")),
   );
 
   server.registerTool(

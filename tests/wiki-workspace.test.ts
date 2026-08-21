@@ -854,6 +854,32 @@ Visible content.
     );
   });
 
+  it("repairs a missing derived link when the frontmatter relation already exists", async () => {
+    const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
+    const config = await loadConfig(workspacePath);
+    await initializeWiki(config);
+    const source = await captureWikiDocument(config, { content: "Source body.", title: "Source Note", type: "note" });
+    const target = await captureWikiDocument(config, { content: "Target body.", title: "Target Note", type: "note" });
+    await relateWikiDocuments(config, { sourceId: source.id, targetId: target.id, relation: "references" });
+    const sourcePath = path.join(config.resolvedWikiPath, source.path);
+    const withoutLink = (await readFile(sourcePath, "utf8"))
+      .replace("- references: [Target Note](note-target-note.md)\n", "");
+    await writeFile(sourcePath, withoutLink, "utf8");
+
+    const result = await relateWikiDocuments(config, {
+      sourceId: source.id,
+      targetId: target.id,
+      relation: "references",
+      syncLinks: true,
+    });
+    const repaired = await getWikiDocumentById(config, source.id);
+
+    expect(result.created).toBe(false);
+    expect(result.synchronized).toMatchObject({ linksCreated: 0, documentsUpdated: 0 });
+    expect(repaired?.metadata.related).toEqual([{ id: target.id, relation: "references" }]);
+    expect(repaired?.content).toContain("- references: [Target Note](note-target-note.md)");
+  });
+
   it("accepts documented relation catalog entries", async () => {
     const workspacePath = await createWorkspace({ wikiPath: "../wiki" });
     const config = await loadConfig(workspacePath);
@@ -1382,14 +1408,17 @@ type: note
 
     const result = await runWikiDoctor(config);
 
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
     expect(result.checks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "config", status: "pass" }),
         expect.objectContaining({ name: "wiki", status: "pass" }),
         expect.objectContaining({ name: "structure", status: "pass" }),
         expect.objectContaining({ name: "lint", status: "pass" }),
-        expect.objectContaining({ name: "index", status: "pass" }),
+         expect.objectContaining({ name: "index", status: "pass" }),
+         expect.objectContaining({ name: "index.md", status: "pass" }),
+         expect.objectContaining({ name: ".thoth/index.json", status: "fail" }),
+         expect.objectContaining({ name: ".thoth/relations.json", status: "fail" }),
       ]),
     );
   });

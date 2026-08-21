@@ -18,12 +18,14 @@ describe("Core compatibility adapters", () => {
     expect(await lintThroughCore(config)).toMatchObject({ documentsChecked: expect.any(Number), issues: [] });
   });
 
-  it("never writes before confirmation and accepts the proposal token", async () => {
+  it("never writes before confirmation and requires the proposal token", async () => {
     const config = await workspace();
     const request = { intent: "capture" as const, input: { content: "adapter write", title: "Adapter write" } };
     const proposal = await writeThroughCore(config, request);
     expect(proposal).toMatchObject({ ok: true, status: "proposal", error: { code: "confirmation_required" } });
-    const executed = await writeThroughCore(config, request, { confirmationToken: proposal.plan?.confirmationToken });
+    const tokenOnly = await writeThroughCore(config, request, { confirmationToken: proposal.plan?.confirmationToken });
+    expect(tokenOnly).toMatchObject({ ok: true, status: "proposal", error: { code: "confirmation_required" } });
+    const executed = await writeThroughCore(config, request, { confirmed: true, confirmationToken: proposal.plan?.confirmationToken });
     expect(executed).toMatchObject({ ok: true, status: "executed" });
   });
 });

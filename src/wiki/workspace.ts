@@ -1,4 +1,4 @@
-import { lstat, readdir, readFile, unlink } from "node:fs/promises";
+import { lstat, readdir, readFile, rmdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Ajv2020 } from "ajv/dist/2020.js";
@@ -13,6 +13,7 @@ import {
   withWorkspaceLock,
   writeFileIfMissing,
 } from "../storage/index.js";
+import type { AtomicWriteBatchEntry } from "../storage/index.js";
 
 const wikiDirectories = [
   ".thoth",
@@ -148,6 +149,9 @@ export type WikiInitResult = WikiStatus & {
   createdDirectories: string[];
   index: "created" | "exists";
   log: "created" | "exists";
+  dryRun?: boolean;
+  plannedDirectories?: string[];
+  plannedFiles?: string[];
 };
 
 export type WikiDocumentSummary = {
@@ -252,6 +256,8 @@ export type WikiRelateInput = {
   sourceId: string;
   targetId: string;
   relation: string;
+  /** Explicitly include derived Markdown-link synchronization in this plan. */
+  syncLinks?: boolean;
 };
 
 export type WikiRelateResult = {
@@ -282,7 +288,11 @@ export type WikiIndexResult = {
   indexPath: string;
   relationsPath: string;
   warnings: string[];
+  dryRun?: boolean;
+  human?: WikiHumanIndexResult;
 };
+
+export type WikiIndexOptions = WikiHumanIndexOptions & { human?: boolean; dryRun?: boolean };
 
 export type WikiHumanIndexResult = {
   documentsIndexed: number;
@@ -302,6 +312,7 @@ export type WikiSyncLinksResult = {
   documentsChecked: number;
   documentsUpdated: number;
   linksCreated: number;
+  dryRun?: boolean;
 };
 
 export type WikiLintIssue = {
@@ -378,42 +389,51 @@ export async function getWikiStatus(
 
 async function initializeWikiUnsafe(
   config: ResolvedThothConfig,
+  options: { beforeFileWrite?: (fileName: "index.md" | "log.md") => Promise<void> } = {},
 ): Promise<WikiInitResult> {
   const createdDirectories: string[] = [];
 
-  await ensureDirectory(config.resolvedWikiPath);
-
-  for (const directory of wikiDirectories) {
-    const directoryPath = path.join(config.resolvedWikiPath, directory);
-
-    if (!(await pathExists(directoryPath))) {
-      await ensureDirectory(directoryPath);
-      createdDirectories.push(directory);
+  const rootExisted = await pathExists(config.resolvedWikiPath);
+  const createdFiles: string[] = [];
+  try {
+    await ensureDirectory(config.resolvedWikiPath);
+    for (const directory of wikiDirectories) {
+      const directoryPath = path.join(config.resolvedWikiPath, directory);
+      if (!(await pathExists(directoryPath))) {
+        await ensureDirectory(directoryPath);
+        createdDirectories.push(directoryPath);
+      }
     }
+
+    const indexPath = path.join(config.resolvedWikiPath, "index.md");
+    await options.beforeFileWrite?.("index.md");
+    const index = await writeFileIfMissing(indexPath, createWikiIndex(config.dateFormat), { workspaceRoot: config.resolvedWikiPath });
+    if (index === "created") createdFiles.push(indexPath);
+    const logPath = path.join(config.resolvedWikiPath, "log.md");
+    await options.beforeFileWrite?.("log.md");
+    const log = await writeFileIfMissing(logPath, createWikiLog(config.dateFormat), { workspaceRoot: config.resolvedWikiPath });
+    if (log === "created") createdFiles.push(logPath);
+
+    return { ...await getWikiStatus(config), createdDirectories: createdDirectories.map((entry) => path.relative(config.resolvedWikiPath, entry)), index, log };
+  } catch (error) {
+    for (const filePath of createdFiles.reverse()) await unlink(filePath).catch(() => undefined);
+    for (const directoryPath of createdDirectories.reverse()) await rmdir(directoryPath).catch(() => undefined);
+    if (!rootExisted) await rmdir(config.resolvedWikiPath).catch(() => undefined);
+    throw error;
   }
-
-  const index = await writeFileIfMissing(
-    path.join(config.resolvedWikiPath, "index.md"),
-    createWikiIndex(config.dateFormat), { workspaceRoot: config.resolvedWikiPath },
-  );
-
-  const log = await writeFileIfMissing(
-    path.join(config.resolvedWikiPath, "log.md"),
-    createWikiLog(config.dateFormat), { workspaceRoot: config.resolvedWikiPath },
-  );
-
-  const status = await getWikiStatus(config);
-
-  return {
-    ...status,
-    createdDirectories,
-    index,
-    log,
-  };
 }
 
-export function initializeWiki(config: ResolvedThothConfig): Promise<WikiInitResult> {
-  return withWorkspaceLock(config.resolvedWikiPath, () => initializeWikiUnsafe(config));
+export async function initializeWiki(config: ResolvedThothConfig, options: { dryRun?: boolean; /** Test/fault-injection hook; production callers should omit it. */ beforeFileWrite?: (fileName: "index.md" | "log.md") => Promise<void> } = {}): Promise<WikiInitResult> {
+  if (options.dryRun) {
+    const status = await getWikiStatus(config);
+    const missingDirectories = wikiDirectories.filter((directory) => status.missingDirectories.includes(directory));
+    const plannedFiles: string[] = [];
+    for (const file of ["index.md", "log.md"]) {
+      if (!(await pathExists(path.join(config.resolvedWikiPath, file)))) plannedFiles.push(file);
+    }
+    return { ...status, createdDirectories: [], index: status.indexExists ? "exists" : "created", log: await pathExists(path.join(config.resolvedWikiPath, "log.md")) ? "exists" : "created", dryRun: true, plannedDirectories: missingDirectories, plannedFiles };
+  }
+  return withWorkspaceLock(config.resolvedWikiPath, () => initializeWikiUnsafe(config, options), { cleanupEmptyLockDirectory: true });
 }
 
 export async function listWikiDocuments(
@@ -726,7 +746,39 @@ async function relateWikiDocumentsUnsafe(
   }
 
   const update = prepareRelationUpdate(source, target, input, config.dateFormat);
-  if (update.content !== undefined) await atomicWriteFile(source.path, update.content, { workspaceRoot: config.resolvedWikiPath });
+  let synchronized = { documentsUpdated: 0, linksCreated: 0 };
+  if (input.syncLinks) {
+    const documents = await Promise.all((await collectMarkdownFiles(config.resolvedWikiPath)).map((file) => readWikiDocument(config.resolvedWikiPath, file)));
+    const byId = new Map(documents.map((document) => [document.id, document]));
+    const batch: Array<{ filePath: string; content: string }> = update.content === undefined
+      ? []
+      : [{ filePath: source.path, content: update.content }];
+    for (const document of documents) {
+      if (document.path === source.document.path) continue;
+      const relations = readRelations(document.metadata.related);
+      if (!relations.length) continue;
+      const parsed = matter(document.raw);
+      const metadata = { ...(parsed.data as Record<string, unknown>) };
+      let content = parsed.content;
+      let created = 0;
+      for (const relation of relations) {
+        const related = byId.get(relation.id);
+        if (!related) continue;
+        const next = appendMarkdownRelation(content, { relation: relation.relation, targetTitle: related.title, targetPath: path.relative(path.dirname(path.join(config.resolvedWikiPath, document.path)), path.join(config.resolvedWikiPath, related.path)) });
+        if (next !== content) { content = next; created += 1; }
+      }
+      if (created) {
+        normalizeDateMetadata(metadata, config.dateFormat);
+        metadata.updated_at = currentDate(config.dateFormat);
+        batch.push({ filePath: path.join(config.resolvedWikiPath, document.path), content: matter.stringify(content, metadata) });
+        synchronized.documentsUpdated += 1;
+        synchronized.linksCreated += created;
+      }
+    }
+    await atomicWriteBatch(batch, { workspaceRoot: config.resolvedWikiPath });
+  } else if (update.content !== undefined) {
+    await atomicWriteBatch([{ filePath: source.path, content: update.content }], { workspaceRoot: config.resolvedWikiPath });
+  }
 
   return {
     source: input.sourceId,
@@ -734,6 +786,7 @@ async function relateWikiDocumentsUnsafe(
     relation: input.relation,
     path: source.document.path,
     created: update.created,
+    ...(input.syncLinks ? { synchronized } : {}),
   };
 }
 
@@ -749,7 +802,18 @@ function prepareRelationUpdate(
   assertValidSourceRelation(input.relation, source.document, target.document);
   const relations = readRelations(metadata.related);
   const exists = relations.some((relation) => relation.id === input.targetId && relation.relation === input.relation);
-  if (exists) return { created: false };
+  if (exists) {
+    const content = appendMarkdownRelation(parsed.content, {
+      relation: input.relation,
+      targetTitle: target.document.title,
+      targetPath: path.relative(path.dirname(source.path), target.path),
+    });
+    // An existing frontmatter edge still needs its derived link repaired when
+    // synchronization was explicitly requested. Never append the edge again.
+    return !input.syncLinks || content === parsed.content
+      ? { created: false }
+      : { created: false, content: matter.stringify(content, metadata) };
+  }
   metadata.related = [...relations, { id: input.targetId, relation: input.relation }];
   normalizeDateMetadata(metadata, dateFormat);
   metadata.updated_at = currentDate(dateFormat);
@@ -894,11 +958,7 @@ export async function searchWikiDocuments(
   return results.sort((left, right) => left.path.localeCompare(right.path));
 }
 
-async function rebuildWikiIndexUnsafe(
-  config: ResolvedThothConfig,
-): Promise<WikiIndexResult> {
-  await ensureDirectory(path.join(config.resolvedWikiPath, ".thoth"));
-
+async function rebuildWikiIndexUnsafe(config: ResolvedThothConfig, options: WikiIndexOptions = {}): Promise<WikiIndexResult> {
   const markdownPaths = await collectMarkdownFiles(config.resolvedWikiPath);
   const documents: WikiDocumentSummary[] = [];
   const relations: WikiRelation[] = [];
@@ -907,6 +967,11 @@ async function rebuildWikiIndexUnsafe(
 
   for (const markdownPath of markdownPaths) {
     const document = await readWikiDocument(config.resolvedWikiPath, markdownPath);
+
+    // When the human view is part of this transaction, index.md is replaced
+    // by that batch and must not make the technical snapshot depend on the
+    // pre-transaction file.
+    if (options.human && document.path === "index.md") continue;
 
     // Only generated category pages are views, not canonical technical documents.
     if (isGeneratedCategoryPage(document)) {
@@ -946,29 +1011,75 @@ async function rebuildWikiIndexUnsafe(
 
   const indexPath = path.join(config.resolvedWikiPath, ".thoth", "index.json");
   const relationsPath = path.join(config.resolvedWikiPath, ".thoth", "relations.json");
-
-  await atomicWriteFile(
-    indexPath,
-    `${JSON.stringify({ documents, warnings }, null, 2)}\n`,
-    { workspaceRoot: config.resolvedWikiPath },
-  );
-  await atomicWriteFile(
-    relationsPath,
-    `${JSON.stringify({ relations, warnings }, null, 2)}\n`,
-    { workspaceRoot: config.resolvedWikiPath },
-  );
-
+  const indexValue = { documents, warnings };
+  const relationsValue = { relations, warnings };
+  const schemas = await loadWikiSchemas(config.workspacePath);
+  if (!schemas.index(indexValue)) throw new Error(`Generated index is invalid: ${formatSchemaErrors(schemas.index.errors)}`);
+  if (!schemas.relationsIndex(relationsValue)) throw new Error(`Generated relations index is invalid: ${formatSchemaErrors(schemas.relationsIndex.errors)}`);
+  const entries: AtomicWriteBatchEntry[] = [
+    { filePath: indexPath, content: `${JSON.stringify(indexValue, null, 2)}\n` },
+    { filePath: relationsPath, content: `${JSON.stringify(relationsValue, null, 2)}\n` },
+  ];
+  let human: PreparedHumanIndex | undefined;
+  if (options.human) {
+    human = await prepareHumanIndexBatch(config, options, markdownPaths);
+    entries.push(...human.entries);
+  }
+  if (!options.dryRun) await atomicWriteBatch(entries, { workspaceRoot: config.resolvedWikiPath });
   return {
     documentsIndexed: documents.length,
     relationsIndexed: relations.length,
     indexPath: path.relative(config.resolvedWikiPath, indexPath),
     relationsPath: path.relative(config.resolvedWikiPath, relationsPath),
     warnings,
+    ...(options.dryRun ? { dryRun: true } : {}),
+    ...(human ? { human: { ...human, entries: undefined } as WikiHumanIndexResult } : {}),
   };
 }
 
-export function rebuildWikiIndex(config: ResolvedThothConfig): Promise<WikiIndexResult> {
-  return withWorkspaceLock(config.resolvedWikiPath, () => rebuildWikiIndexUnsafe(config));
+export function rebuildWikiIndex(config: ResolvedThothConfig, options: WikiIndexOptions = {}): Promise<WikiIndexResult> {
+  return withWorkspaceLock(config.resolvedWikiPath, () => rebuildWikiIndexUnsafe(config, options));
+}
+
+type PreparedHumanIndex = WikiHumanIndexResult & { entries: AtomicWriteBatchEntry[] };
+
+async function prepareHumanIndexBatch(config: ResolvedThothConfig, options: WikiIndexOptions, markdownPaths: string[]): Promise<PreparedHumanIndex> {
+  if (options.type && !validWikiDocumentTypeSet.has(options.type)) throw new Error(`Invalid wiki document type: ${options.type}`);
+  if (options.maxPerSection !== undefined && (!Number.isSafeInteger(options.maxPerSection) || options.maxPerSection < 0)) throw new Error("maxPerSection must be a non-negative safe integer");
+  const scanned = await Promise.all(markdownPaths.map((file) => readWikiDocument(config.resolvedWikiPath, file)));
+  const canonical = scanned.filter((document) => !isGeneratedArtifact(document));
+  const visible = canonical.filter((document) => options.curated || !document.id.startsWith("wiki-"));
+  const all = visible.filter((document) => !options.type || document.type === options.type).sort((left, right) => {
+    const order = humanIndexSections.findIndex((section) => section.type === left.type) - humanIndexSections.findIndex((section) => section.type === right.type);
+    return order || left.title.localeCompare(right.title);
+  });
+  const documents = options.maxPerSection === undefined ? all : all.filter((document, index, values) => {
+    const type = values[index].type;
+    return values.slice(0, index).filter((item) => item.type === type).length < options.maxPerSection!;
+  });
+  const categoryPagePaths: string[] = [];
+  const entries: AtomicWriteBatchEntry[] = [{ filePath: path.join(config.resolvedWikiPath, "index.md"), content: "" }];
+  if (options.categoryPages) {
+    const types = [...new Set(canonical.filter((document) => !options.type || document.type === options.type).map((document) => document.type))].sort();
+    for (const type of types) {
+      const categoryPath = `index-${type}.md`;
+      const existing = scanned.find((document) => document.path === categoryPath);
+      if (existing && !isGeneratedArtifact(existing)) throw new Error(`Cannot generate ${categoryPath}: a canonical document already exists at that path; refusing to overwrite it`);
+      const categoryDocuments = canonical.filter((document) => document.type === type);
+      if (categoryDocuments.length) {
+        categoryPagePaths.push(categoryPath);
+        entries.push({ filePath: path.join(config.resolvedWikiPath, categoryPath), content: createHumanCategoryIndex(humanIndexSections.find((section) => section.type === type)?.heading ?? `${type[0]?.toUpperCase() ?? ""}${type.slice(1)}`, type, categoryDocuments, canonical, config.dateFormat) });
+      }
+    }
+  }
+  const wantedCategories = new Set(categoryPagePaths);
+  for (const document of scanned) {
+    if (isGeneratedCategoryPage(document) && !wantedCategories.has(document.path)) {
+      entries.push({ filePath: path.join(config.resolvedWikiPath, document.path), delete: true });
+    }
+  }
+  entries[0].content = createHumanWikiIndex(documents, categoryPagePaths, canonical, config.dateFormat);
+  return { documentsIndexed: documents.length, relationsIndexed: documents.flatMap((document) => readRelations(document.metadata.related)).length, indexPath: "index.md", categoryPages: categoryPagePaths, entries };
 }
 
 async function rebuildHumanWikiIndexUnsafe(
@@ -1069,9 +1180,10 @@ export function rebuildHumanWikiIndex(config: ResolvedThothConfig, options: Wiki
 
 async function syncWikiRelationLinksUnsafe(
   config: ResolvedThothConfig,
+  options: { dryRun?: boolean } = {},
 ): Promise<WikiSyncLinksResult> {
   if (!(await pathExists(config.resolvedWikiPath))) {
-    return { documentsChecked: 0, documentsUpdated: 0, linksCreated: 0 };
+    return { documentsChecked: 0, documentsUpdated: 0, linksCreated: 0, ...(options.dryRun ? { dryRun: true } : {}) };
   }
 
   const markdownPaths = await collectMarkdownFiles(config.resolvedWikiPath);
@@ -1081,6 +1193,7 @@ async function syncWikiRelationLinksUnsafe(
   const documentsById = new Map(documents.map((document) => [document.id, document]));
   let documentsUpdated = 0;
   let linksCreated = 0;
+  const batch: Array<{ filePath: string; content: string }> = [];
 
   for (const document of documents) {
     const relations = readRelations(document.metadata.related);
@@ -1116,25 +1229,23 @@ async function syncWikiRelationLinksUnsafe(
     if (documentLinksCreated > 0) {
       normalizeDateMetadata(metadata, config.dateFormat);
       metadata.updated_at = currentDate(config.dateFormat);
-      await atomicWriteFile(
-        path.join(config.resolvedWikiPath, document.path),
-        matter.stringify(content, metadata),
-        { workspaceRoot: config.resolvedWikiPath },
-      );
+      batch.push({ filePath: path.join(config.resolvedWikiPath, document.path), content: matter.stringify(content, metadata) });
       documentsUpdated += 1;
       linksCreated += documentLinksCreated;
     }
   }
 
+  if (!options.dryRun) await atomicWriteBatch(batch, { workspaceRoot: config.resolvedWikiPath });
   return {
     documentsChecked: documents.length,
     documentsUpdated,
     linksCreated,
+    ...(options.dryRun ? { dryRun: true } : {}),
   };
 }
 
-export function syncWikiRelationLinks(config: ResolvedThothConfig): Promise<WikiSyncLinksResult> {
-  return withWorkspaceLock(config.resolvedWikiPath, () => syncWikiRelationLinksUnsafe(config));
+export function syncWikiRelationLinks(config: ResolvedThothConfig, options: { dryRun?: boolean } = {}): Promise<WikiSyncLinksResult> {
+  return withWorkspaceLock(config.resolvedWikiPath, () => syncWikiRelationLinksUnsafe(config, options));
 }
 
 export async function lintWikiDocuments(
@@ -1289,20 +1400,15 @@ export async function runWikiDoctor(
         : `${lint.issues.length} issues across ${lint.documentsChecked} documents`,
     });
 
-    try {
-      const index = await rebuildWikiIndex(config);
-      checks.push({
-        name: "index",
-        status: "pass",
-        message: `Regenerated ${index.documentsIndexed} documents and ${index.relationsIndexed} relations`,
-      });
-    } catch (error) {
-      checks.push({
-        name: "index",
-        status: "fail",
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
+    checks.push({
+      name: "index",
+      status: status.indexExists ? "pass" : "fail",
+      message: status.indexExists ? "Index exists (not rebuilt by diagnostic doctor)" : "Index not found (not rebuilt by diagnostic doctor)",
+    });
+    const schemas = await loadWikiSchemas(config.workspacePath);
+    checks.push(await diagnoseDerivedFile(config.resolvedWikiPath, "index.md", "markdown"));
+    checks.push(await diagnoseDerivedFile(config.resolvedWikiPath, path.join(".thoth", "index.json"), schemas.index));
+    checks.push(await diagnoseDerivedFile(config.resolvedWikiPath, path.join(".thoth", "relations.json"), schemas.relationsIndex));
   } else {
     checks.push({
       name: "lint",
@@ -1314,12 +1420,40 @@ export async function runWikiDoctor(
       status: "fail",
       message: "Skipped because wiki does not exist",
     });
+    checks.push({ name: "index.md", status: "fail", message: "Skipped because wiki does not exist" });
+    checks.push({ name: path.join(".thoth", "index.json"), status: "fail", message: "Skipped because wiki does not exist" });
+    checks.push({ name: path.join(".thoth", "relations.json"), status: "fail", message: "Skipped because wiki does not exist" });
   }
 
   return {
     ok: checks.every((check) => check.status === "pass"),
     checks,
   };
+}
+
+async function diagnoseDerivedFile(
+  wikiPath: string,
+  relativePath: string,
+  validator: ValidateFunction | "markdown",
+): Promise<WikiDoctorCheck> {
+  const filePath = path.join(wikiPath, relativePath);
+  try {
+    const raw = await readFile(filePath, "utf8");
+    if (validator === "markdown") {
+      matter(raw);
+      if (raw.trim().length === 0) throw new Error("File is empty");
+    } else {
+      const valid = validator(JSON.parse(raw));
+      if (!valid) throw new Error(formatSchemaErrors(validator.errors));
+    }
+    return { name: relativePath, status: "pass", message: "Readable and valid (not regenerated)" };
+  } catch (error) {
+    return { name: relativePath, status: "fail", message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function formatSchemaErrors(errors: ErrorObject[] | null | undefined): string {
+  return errors?.map((error) => `${error.instancePath || "/"} ${error.message ?? "invalid"}`).join("; ") || "Schema validation failed";
 }
 
 type WikiSchemaValidators = {

@@ -27,7 +27,9 @@ try {
 
   await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "--version"], workspacePath);
   await run("node", [path.join(tempRoot, "node_modules/.bin/thoth-mcp"), "--version"], workspacePath);
-  await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "init"], workspacePath);
+  const initPlanOutput = await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "core", "plan", "--input", JSON.stringify({ intent: "init", input: {} })], workspacePath);
+  const initPlan = JSON.parse(initPlanOutput.stdout);
+  await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "core", "execute", "--input", JSON.stringify(initPlan), "--confirmed", "--token", initPlan.confirmationToken], workspacePath);
   await run("node", [
     path.join(tempRoot, "node_modules/.bin/thoth"),
     "capture",
@@ -43,7 +45,9 @@ try {
   await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "search", "smoke"], tempRoot, {
     THOTH_CONFIG: path.join(workspacePath, "thoth.config.json"),
   });
-  await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "index", "--human"], workspacePath);
+  const planOutput = await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "core", "plan", "--input", JSON.stringify({ intent: "index", input: { human: true } })], workspacePath);
+  const indexPlan = JSON.parse(planOutput.stdout);
+  await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "core", "execute", "--input", JSON.stringify(indexPlan), "--confirmed", "--token", indexPlan.confirmationToken], workspacePath);
   await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "sync-links"], workspacePath);
   await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "agents", "list"], workspacePath);
   await run("node", [path.join(tempRoot, "node_modules/.bin/thoth"), "agents", "validate"], workspacePath);

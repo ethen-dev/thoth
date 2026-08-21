@@ -124,7 +124,7 @@ async function runLlmSkill(config: SkillRuntimeConfig, skillId: string, version:
   if (!invocation.confirmed) return { ok: true, skillId, mode: "execute", readOnly: true, status: "error", data: { proposal, plan: planned, confirmationToken: token }, error: { code: "confirmation_required", message: "Confirmation is required before executing a mutation" } };
   if (!invocation.confirmationToken) return failure(skillId, "confirmation_token_required", "confirmed=true requires the exact confirmationToken", invocation.mode);
   if (invocation.confirmationToken !== token) return failure(skillId, "confirmation_mismatch", "The confirmationToken does not match the reviewed proposal", invocation.mode);
-  const result = await executePlan(config, planned, { confirmed: true });
+  const result = await executePlan(config, planned, { confirmed: true, confirmationToken: planned.confirmationToken });
   return { ok: result.ok, skillId, mode: "execute", readOnly: false, status: result.ok ? "executed" : "error", data: result, error: result.error };
 }
 
@@ -149,7 +149,7 @@ async function finishProposal(config: SkillRuntimeConfig, skillId: string, versi
   if (!invocation.confirmed) return { ok: true, skillId, mode: "execute", readOnly: true, status: "error", data: { proposal, plan: planned, confirmationToken: token }, error: { code: "confirmation_required", message: "Confirmation is required before executing a mutation" } };
   if (!invocation.confirmationToken) return failure(skillId, "confirmation_token_required", "confirmed=true requires the exact confirmationToken", invocation.mode);
   if (invocation.confirmationToken !== token) return failure(skillId, "confirmation_mismatch", "The confirmationToken does not match the reviewed proposal", invocation.mode);
-  const result = await executePlan(config, planned, { confirmed: true });
+  const result = await executePlan(config, planned, { confirmed: true, confirmationToken: planned.confirmationToken });
   return { ok: result.ok, skillId, mode: "execute", readOnly: false, status: result.ok ? "executed" : "error", data: result, error: result.error };
 }
 

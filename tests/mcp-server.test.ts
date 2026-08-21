@@ -52,6 +52,8 @@ describe("MCP server", () => {
         },
       });
       const lintResult = await client.callTool({ name: "wiki_lint", arguments: {} });
+      const statusResult = await client.callTool({ name: "wiki_status", arguments: {} });
+      const doctorResult = await client.callTool({ name: "wiki_doctor", arguments: {} });
       const skillListResult = await client.callTool({ name: "skill_list", arguments: {} });
       const skillShowResult = await client.callTool({ name: "skill_show", arguments: { id: "wiki-query" } });
       const skillValidateResult = await client.callTool({ name: "skill_validate", arguments: {} });
@@ -63,6 +65,12 @@ describe("MCP server", () => {
       const coreWriteResult = await client.callTool({ name: "core_execute", arguments: { plan: JSON.parse(coreWritePlan.content[0]?.type === "text" ? coreWritePlan.content[0].text : "{}") } });
       const coreMalformedResult = await client.callTool({ name: "core_execute", arguments: { plan: [] } });
       const coreCrossedResult = await client.callTool({ name: "core_plan", arguments: { intent: "query", action: "wiki.show", input: { id: "wiki-index" } } });
+      const relatePlanResult = await client.callTool({ name: "wiki_relate", arguments: { sourceId: "note-match", targetId: "wiki-index", relation: "references" } });
+      const relatePlan = JSON.parse(relatePlanResult.content[0]?.type === "text" ? relatePlanResult.content[0].text : "{}");
+      const relateNoConfirmResult = relatePlan;
+      const relateInvalidTokenResult = await client.callTool({ name: "wiki_relate", arguments: { sourceId: "note-match", targetId: "wiki-index", relation: "references", confirmed: true, confirmationToken: "wrong" } });
+      const relateResult = await client.callTool({ name: "wiki_relate", arguments: { sourceId: "note-match", targetId: "wiki-index", relation: "references", confirmed: true, confirmationToken: relatePlan.plan?.confirmationToken } });
+      const relateAgainResult = await client.callTool({ name: "wiki_relate", arguments: { sourceId: "note-match", targetId: "wiki-index", relation: "references", confirmed: true, confirmationToken: relatePlan.plan?.confirmationToken } });
       const captureProposalResult = await client.callTool({ name: "wiki_capture", arguments: { content: "mcp captured", title: "MCP captured" } });
       const captureProposal = JSON.parse(captureProposalResult.content[0]?.type === "text" ? captureProposalResult.content[0].text : "{}");
       const captureResult = await client.callTool({ name: "wiki_capture", arguments: { content: "mcp captured", title: "MCP captured", confirmed: true, confirmationToken: captureProposal.plan.confirmationToken } });
@@ -106,6 +114,8 @@ describe("MCP server", () => {
           "wiki_relate",
           "wiki_index",
           "wiki_lint",
+          "wiki_status",
+          "wiki_doctor",
           "wiki_log",
           "skill_list",
           "skill_show",
@@ -114,6 +124,10 @@ describe("MCP server", () => {
         ]),
       );
       expect(lintResult.content[0]).toMatchObject({ type: "text" });
+      expect(JSON.parse(statusResult.content[0]?.type === "text" ? statusResult.content[0].text : "{}")).toMatchObject({ wikiExists: true });
+      expect(JSON.parse(doctorResult.content[0]?.type === "text" ? doctorResult.content[0].text : "{}")).toMatchObject({ ok: false, checks: expect.arrayContaining([expect.objectContaining({ name: ".thoth/index.json", status: "fail" }), expect.objectContaining({ name: ".thoth/relations.json", status: "fail" })]) });
+      const diagnosticAudit = JSON.parse(auditResult.content[0]?.type === "text" ? auditResult.content[0].text : "{}").events as Array<{ operation: string; surface: string; affectedIds: string[] }>;
+      expect(diagnosticAudit.filter((event) => ["status", "doctor"].includes(event.affectedIds[0] ?? "") && event.surface === "mcp")).toHaveLength(4);
       expect(JSON.parse(skillListResult.content[0]?.type === "text" ? skillListResult.content[0].text : "{}").skills).toEqual(expect.arrayContaining([expect.objectContaining({ id: "wiki-query", path: "skills/llm-wiki/wiki-query.md" })]));
       expect(JSON.parse(skillShowResult.content[0]?.type === "text" ? skillShowResult.content[0].text : "{}")).toMatchObject({ id: "wiki-query", category: "llm-wiki" });
       expect(JSON.parse(skillValidateResult.content[0]?.type === "text" ? skillValidateResult.content[0].text : "{}")).toMatchObject({ ok: true });
@@ -136,6 +150,10 @@ describe("MCP server", () => {
       }
       expect(JSON.parse(coreMalformedResult.content[0]?.type === "text" ? coreMalformedResult.content[0].text : "{}")).toMatchObject({ ok: false, error: { code: "invalid_input" } });
       expect(JSON.parse(coreCrossedResult.content[0]?.type === "text" ? coreCrossedResult.content[0].text : "{}")).toMatchObject({ status: "error", error: { code: "not_allowlisted" } });
+      expect(relateNoConfirmResult).toMatchObject({ status: "proposal", error: { code: "confirmation_required" } });
+      expect(JSON.parse(relateInvalidTokenResult.content[0]?.type === "text" ? relateInvalidTokenResult.content[0].text : "{}")).toMatchObject({ status: "error", error: { code: "confirmation_required" } });
+      expect(JSON.parse(relateResult.content[0]?.type === "text" ? relateResult.content[0].text : "{}")).toMatchObject({ status: "executed", results: [{ source: "note-match", target: "wiki-index", created: true }] });
+      expect(JSON.parse(relateAgainResult.content[0]?.type === "text" ? relateAgainResult.content[0].text : "{}")).toMatchObject({ status: "executed", results: [{ created: false }] });
       expect(JSON.parse(configCoreResult.content[0]?.type === "text" ? configCoreResult.content[0].text : "{}")).toMatchObject({ status: "error", error: { code: "not_allowlisted" } });
       expect(JSON.parse(configSkillResult.content[0]?.type === "text" ? configSkillResult.content[0].text : "{}")).toMatchObject({ ok: false, error: { code: "provider_required" } });
       const legacySearch = JSON.parse(legacySearchResult.content[0]?.type === "text" ? legacySearchResult.content[0].text : "{}");

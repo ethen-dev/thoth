@@ -58,6 +58,27 @@ describe("safe filesystem storage", () => {
     expect((await stat(first)).mode & 0o7777).toBe(originalMode);
   });
 
+  it("rolls back writes and deletions together after a later commit failure", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "thoth-batch-rollback-"));
+    roots.push(root);
+    const first = path.join(root, "first.json");
+    const obsolete = path.join(root, "index-note.md");
+    const third = path.join(root, "relations.json");
+    await writeFile(first, "old index", "utf8");
+    await writeFile(obsolete, "old category", "utf8");
+    await writeFile(third, "old relations", "utf8");
+    await expect(atomicWriteBatch([
+      { filePath: first, content: "new index" },
+      { filePath: obsolete, delete: true },
+      { filePath: third, content: "new relations" },
+    ], { workspaceRoot: root, beforeCommit: async (index) => {
+      if (index === 2) throw new Error("injected late failure");
+    }})).rejects.toThrow("injected late failure");
+    expect(await readFile(first, "utf8")).toBe("old index");
+    expect(await readFile(obsolete, "utf8")).toBe("old category");
+    expect(await readFile(third, "utf8")).toBe("old relations");
+  });
+
   it("writes lock ownership metadata", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "thoth-lock-meta-"));
     roots.push(root);

@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
-import { copyFile, lstat, mkdir, open, readFile, rename, stat, unlink } from "node:fs/promises";
+import { copyFile, lstat, mkdir, open, readFile, rename, rmdir, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 
 const lockContexts = new AsyncLocalStorage<symbol>();
@@ -70,7 +70,7 @@ export async function atomicWriteFile(
   }
 }
 
-export type AtomicWriteBatchEntry = { filePath: string; content: string };
+export type AtomicWriteBatchEntry = { filePath: string; content?: string; delete?: boolean };
 export type AtomicWriteBatchOptions = {
   workspaceRoot?: string;
   encoding?: BufferEncoding;
@@ -87,6 +87,7 @@ export async function atomicWriteBatch(
   const committed: typeof prepared = [];
   try {
     for (const entry of entries) {
+      if ((entry.content === undefined) === (entry.delete !== true)) throw new Error("Atomic batch entries must contain content or delete: true");
       const target = assertWorkspacePath(entry.filePath, options.workspaceRoot);
       await assertNoSymlinkInPath(target, options.workspaceRoot);
       await ensureDirectory(path.dirname(target));
@@ -104,15 +105,20 @@ export async function atomicWriteBatch(
         await backupHandle.close();
         item.backup = backup;
       }
-      const handle = await open(temp, "wx", mode);
-      await handle.writeFile(entry.content, options.encoding ?? "utf8");
-      await handle.chmod(mode);
-      await handle.sync();
-      await handle.close();
+       if (entry.delete !== true) {
+         const handle = await open(temp, "wx", mode);
+         await handle.writeFile(entry.content!, options.encoding ?? "utf8");
+         await handle.chmod(mode);
+         await handle.sync();
+         await handle.close();
+       }
     }
     for (let index = 0; index < prepared.length; index += 1) {
       await options.beforeCommit?.(index);
-      await rename(prepared[index].temp, prepared[index].target);
+       if (entries[index].delete === true) await unlink(prepared[index].target).catch((error) => {
+         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+       });
+       else await rename(prepared[index].temp, prepared[index].target);
       committed.push(prepared[index]);
     }
   } catch (error) {
@@ -143,7 +149,7 @@ async function assertSafeLockRoot(root: string): Promise<void> {
   }
 }
 
-type WorkspaceLockOptions = { timeoutMs?: number; staleMs?: number };
+type WorkspaceLockOptions = { timeoutMs?: number; staleMs?: number; cleanupEmptyLockDirectory?: boolean };
 type LockMetadata = { pid: number; token: string; timestamp: number };
 
 async function processIsAlive(pid: number): Promise<boolean> {
@@ -164,6 +170,8 @@ export async function withWorkspaceLock<T>(workspacePath: string, fn: () => Prom
   const key = path.resolve(workspacePath);
   const timeoutMs = typeof options === "number" ? options : options.timeoutMs ?? 5000;
   const staleMs = typeof options === "number" ? 30_000 : options.staleMs ?? 60_000;
+  const cleanupEmptyLockDirectory = typeof options !== "number" && options.cleanupEmptyLockDirectory === true;
+  const workspaceExisted = await pathExists(key);
   await assertSafeLockRoot(key);
   const context = lockContexts.getStore();
   const current = locks.get(key);
@@ -178,10 +186,12 @@ export async function withWorkspaceLock<T>(workspacePath: string, fn: () => Prom
   const state = { owner, token: randomUUID(), depth: 1, tail: previous.then(() => queued) };
   locks.set(key, state);
   const deadline = Date.now() + timeoutMs;
+  const lockPath = path.join(key, ".thoth", ".workspace.lock");
+  const lockDirectoryExisted = await pathExists(path.dirname(lockPath));
   let acquired = false;
+  let callbackCompleted = false;
   try {
     await Promise.race([previous, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Workspace lock timeout: ${key}`)), Math.max(0, deadline - Date.now()))) ]);
-    const lockPath = path.join(key, ".thoth", ".workspace.lock");
     await assertSafeLockRoot(path.dirname(lockPath));
     await ensureDirectory(path.dirname(lockPath));
     await assertSafeLockRoot(path.dirname(lockPath));
@@ -211,12 +221,18 @@ export async function withWorkspaceLock<T>(workspacePath: string, fn: () => Prom
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
     }
-    return await lockContexts.run(owner, fn);
+    const result = await lockContexts.run(owner, fn);
+    callbackCompleted = true;
+    return result;
   } finally {
     if (acquired) {
       const lockPath = path.join(key, ".thoth", ".workspace.lock");
       const metadata = await readLockMetadata(lockPath);
       if (metadata?.token === state.token) await unlink(lockPath).catch(() => undefined);
+    }
+    if (cleanupEmptyLockDirectory && !callbackCompleted && !lockDirectoryExisted) {
+      await rmdir(path.join(key, ".thoth")).catch(() => undefined);
+      if (!workspaceExisted) await rmdir(key).catch(() => undefined);
     }
     releaseQueue();
     if (locks.get(key) === state) locks.delete(key);

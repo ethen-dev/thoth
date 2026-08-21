@@ -32,6 +32,7 @@ export type {
   WikiDoctorCheck,
   WikiDoctorResult,
   WikiIndexResult,
+  WikiIndexOptions,
   WikiHumanIndexResult,
   WikiLintIssue,
   WikiLintResult,

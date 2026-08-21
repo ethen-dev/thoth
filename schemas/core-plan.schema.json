@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thoth.local/schemas/core-plan.schema.json",
+  "title": "T.H.O.T.H. Core Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "intent", "steps", "confirmationRequired", "status"],
+  "properties": {
+    "version": { "const": 1 },
+    "intent": { "enum": ["query", "list", "show", "status", "doctor", "init", "capture", "update", "append", "relate", "sync_links", "log", "index", "lint", "source_add", "source_link"] },
+    "steps": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/step" } },
+    "confirmationRequired": { "type": "boolean" },
+    "confirmationToken": { "type": "string", "minLength": 1 },
+    "status": { "const": "planned" }
+  },
+  "$defs": { "step": { "type": "object", "additionalProperties": false, "required": ["id", "action", "input", "write", "summary"], "properties": { "id": { "type": "string", "minLength": 1 }, "action": { "enum": ["skill.wiki-query", "wiki.list", "wiki.show", "wiki.status", "wiki.doctor", "wiki.lint", "wiki.init", "wiki.index", "wiki.capture", "wiki.update", "wiki.append", "wiki.relate", "wiki.sync-links", "wiki.log", "wiki.source.add", "wiki.source.link"] }, "input": { "type": "object" }, "write": { "type": "boolean" }, "summary": { "type": "string", "minLength": 1 } } } }
+}

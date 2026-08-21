@@ -14,23 +14,16 @@ import {
   appendWikiDocument,
   captureWikiDocument,
   getWikiDocumentById,
-  getWikiStatus,
-  initializeWiki,
   listWikiDocuments,
   linkWikiSourceDocument,
   lintWikiDocuments,
-  relateWikiDocuments,
-  rebuildHumanWikiIndex,
-  rebuildWikiIndex,
-  runWikiDoctor,
-  syncWikiRelationLinks,
   updateWikiDocument,
   validLogKinds,
   validWikiCaptureDocumentTypes,
   validWikiDocumentTypes,
   validWikiRelationTypes,
 } from "../actions/index.js";
-import { executePlan, loadConfig, planIntentAudited, listThroughCore, showThroughCore, lintThroughCore, sourceListThroughCore, sourceShowThroughCore, writeThroughCore, type IntentRequest, type ThothPlan } from "../core/index.js";
+import { executePlan, loadConfig, planIntentAudited, listThroughCore, showThroughCore, lintThroughCore, statusThroughCore, doctorThroughCore, initThroughCore, sourceListThroughCore, sourceShowThroughCore, writeThroughCore, type IntentRequest, type ThothPlan } from "../core/index.js";
 import { discoverSkills, getSkill, runSkill, validateSkills } from "../skills/index.js";
 import { formatCliSearch, runCliSearch } from "./search.js";
 import { listAuditEvents, validateAuditLimit, verifyAudit } from "../audit/index.js";
@@ -67,16 +60,23 @@ core.command("execute").requiredOption("--input <json>", "ThothPlan JSON").optio
 
 program
   .command("init")
-  .description("Initialize the configured LLM Wiki workspace")
-  .action(async () => {
+  .description("Plan and initialize the configured LLM Wiki workspace")
+  .option("--dry-run", "Plan and validate without writing")
+  .option("--confirmed", "Confirm resource creation")
+  .option("--token <token>", "Confirmation token")
+  .action(async (options: { dryRun?: boolean; confirmed?: boolean; token?: string }) => {
     try {
       const config = await loadConfig();
-      const result = await initializeWiki(config);
-
-      console.log(`Wiki path: ${result.wikiPath}`);
-      console.log(`Directories created: ${result.createdDirectories.length}`);
-      console.log(`Index: ${result.index}`);
-      console.log("T.H.O.T.H. wiki is ready.");
+      const result = await initThroughCore(config, { dryRun: options.dryRun, confirmed: options.confirmed, confirmationToken: options.token }, "cli");
+      if (result.status === "proposal") { printWriteProposal(result); return; }
+      if (!result.ok) throw new Error(result.error?.message ?? "Initialization failed");
+      const initialized = result.results?.[0] as { wikiPath: string; createdDirectories: string[]; index: string; log: string; plannedDirectories?: string[]; plannedFiles?: string[]; dryRun?: boolean };
+      console.log(`Wiki path: ${initialized.wikiPath}`);
+      console.log(`Directories ${initialized.dryRun ? "planned" : "created"}: ${initialized.dryRun ? initialized.plannedDirectories?.length ?? 0 : initialized.createdDirectories.length}`);
+      console.log(`Index: ${initialized.index}`);
+      console.log(`Log: ${initialized.log}`);
+      if (initialized.dryRun) console.log("Dry run: no changes were made.");
+      else console.log("T.H.O.T.H. wiki is ready.");
     } catch (error) {
       reportError(error);
     }
@@ -88,7 +88,7 @@ program
   .action(async () => {
     try {
       const config = await loadConfig();
-      const status = await getWikiStatus(config);
+       const status = await statusThroughCore(config, "cli") as Awaited<ReturnType<typeof statusThroughCore>>;
 
       console.log(`Workspace: ${status.workspacePath}`);
       console.log(`Config: ${status.configPath}`);
@@ -321,47 +321,36 @@ program
   );
 
 program
-  .command("index")
-  .description("Rebuild derived wiki indexes and optionally the human index")
+   .command("index")
+   .description("Rebuild derived wiki indexes and optionally the human index")
+   .option("--dry-run", "Plan and validate without writing")
   .option("--human", "Also rebuild the human Markdown index.md")
   .option("--curated", "Use the conservative human view")
   .option("--category-pages", "Generate exhaustive per-type human index pages")
   .option("--type <type>", documentTypeHelp)
   .option("--max-per-section <n>", "Limit entries in the main human index")
-  .action(async (options: { human?: boolean; curated?: boolean; categoryPages?: boolean; type?: string; maxPerSection?: string }) => {
+   .action(async (options: { human?: boolean; dryRun?: boolean; curated?: boolean; categoryPages?: boolean; type?: string; maxPerSection?: string }) => {
     try {
       validateHumanIndexOptions(options);
       const config = await loadConfig();
-      const result = await rebuildWikiIndex(config);
-
-      console.log(`Documents indexed: ${result.documentsIndexed}`);
-      console.log(`Relations indexed: ${result.relationsIndexed}`);
-      console.log(`Index: ${result.indexPath}`);
-      console.log(`Relations: ${result.relationsPath}`);
-
-      if (result.warnings.length > 0) {
-        console.log("Warnings:");
-
-        for (const warning of result.warnings) {
-          console.log(`- ${warning}`);
-        }
-      }
-
-      if (options.human) {
-        const maxPerSection = options.maxPerSection === undefined ? undefined : Number(options.maxPerSection);
-        const humanIndex = await rebuildHumanWikiIndex(config, {
-          curated: options.curated,
-          categoryPages: options.categoryPages,
-          type: options.type,
-          maxPerSection,
-        });
-
-        console.log(`Human index documents: ${humanIndex.documentsIndexed}`);
-        console.log(`Human index relations: ${humanIndex.relationsIndexed}`);
-        console.log(`Human index: ${humanIndex.indexPath}`);
-        if (humanIndex.categoryPages?.length) {
-          console.log(`Category pages: ${humanIndex.categoryPages.join(", ")}`);
-        }
+      const maxPerSection = options.maxPerSection === undefined ? undefined : Number(options.maxPerSection);
+      const result = await writeThroughCore(config, { intent: "index", input: {
+        human: options.human, curated: options.curated, categoryPages: options.categoryPages,
+        type: options.type, maxPerSection, dryRun: options.dryRun,
+      } }, { surface: "cli" });
+      if (result.status === "proposal") { printWriteProposal(result); return; }
+      if (!result.ok) throw new Error(result.error?.message ?? "Index failed");
+      const indexed = result.results?.[0] as { documentsIndexed: number; relationsIndexed: number; indexPath: string; relationsPath: string; warnings: string[]; human?: { documentsIndexed: number; relationsIndexed: number; indexPath: string; categoryPages?: string[] } };
+      console.log(`Documents indexed: ${indexed.documentsIndexed}`);
+      console.log(`Relations indexed: ${indexed.relationsIndexed}`);
+      console.log(`Index: ${indexed.indexPath}`);
+      console.log(`Relations: ${indexed.relationsPath}`);
+      if (indexed.warnings.length > 0) console.log(`Warnings:\n${indexed.warnings.map((warning) => `- ${warning}`).join("\n")}`);
+      if (indexed.human) {
+        console.log(`Human index documents: ${indexed.human.documentsIndexed}`);
+        console.log(`Human index relations: ${indexed.human.relationsIndexed}`);
+        console.log(`Human index: ${indexed.human.indexPath}`);
+        if (indexed.human.categoryPages?.length) console.log(`Category pages: ${indexed.human.categoryPages.join(", ")}`);
       }
     } catch (error) {
       reportError(error);
@@ -398,14 +387,20 @@ program
 program
   .command("sync-links")
   .description("Sync Markdown relation links from frontmatter related metadata")
-  .action(async () => {
+  .option("--dry-run", "Plan and report changes without writing")
+  .option("--confirmed", "Confirm the proposed mutation")
+  .option("--token <token>", "Confirmation token")
+  .action(async (options: { dryRun?: boolean; confirmed?: boolean; token?: string }) => {
     try {
       const config = await loadConfig();
-      const result = await syncWikiRelationLinks(config);
-
-      console.log(`Documents checked: ${result.documentsChecked}`);
-      console.log(`Documents updated: ${result.documentsUpdated}`);
-      console.log(`Links created: ${result.linksCreated}`);
+      const result = await writeThroughCore(config, { intent: "sync_links", input: { dryRun: options.dryRun } }, { confirmed: options.confirmed, confirmationToken: options.token, surface: "cli" });
+      if (result.status === "proposal") { printWriteProposal(result); return; }
+      if (!result.ok) throw new Error(result.error?.message ?? "Sync links failed");
+      const synced = result.results?.[0] as { documentsChecked: number; documentsUpdated: number; linksCreated: number; dryRun?: boolean };
+      console.log(`Documents checked: ${synced.documentsChecked}`);
+      console.log(`Documents updated: ${synced.documentsUpdated}`);
+      console.log(`Links created: ${synced.linksCreated}`);
+      if (synced.dryRun) console.log("Dry run: no changes were made.");
     } catch (error) {
       reportError(error);
     }
@@ -460,29 +455,36 @@ program
 
 program
   .command("relate")
-  .description("Create a relation between wiki documents")
+  .description("Propose and create one relation on a single source document")
   .argument("<source>", "Source document id")
   .argument("<target>", "Target document id")
   .requiredOption("--relation <relation>", relationTypeHelp)
+  .option("--confirmed", "Confirm the proposed mutation")
+  .option("--token <token>", "Confirmation token")
+  .option("--sync-links", "Explicitly synchronize derived Markdown links in the same atomic plan")
   .action(
     async (
       source: string,
       target: string,
-      options: { relation: string },
+       options: { relation: string; confirmed?: boolean; token?: string; syncLinks?: boolean },
     ) => {
       try {
         const config = await loadConfig();
-        const result = await relateWikiDocuments(config, {
+        const result = await writeThroughCore(config, { intent: "relate", input: {
           sourceId: source,
           targetId: target,
-          relation: options.relation,
-        });
+           relation: options.relation,
+           syncLinks: options.syncLinks,
+        } }, { confirmed: options.confirmed, confirmationToken: options.token, surface: "cli" });
+        if (result.status === "proposal") { printWriteProposal(result); return; }
+        if (!result.ok) throw new Error(result.error?.message ?? "Relate failed");
+        const relation = result.results?.[0] as { source: string; target: string; relation: string; path: string; created: boolean };
 
-        console.log(`Source: ${result.source}`);
-        console.log(`Target: ${result.target}`);
-        console.log(`Relation: ${result.relation}`);
-        console.log(`Path: ${result.path}`);
-        console.log(`Status: ${result.created ? "created" : "exists"}`);
+        console.log(`Source: ${relation.source}`);
+        console.log(`Target: ${relation.target}`);
+        console.log(`Relation: ${relation.relation}`);
+        console.log(`Path: ${relation.path}`);
+        console.log(`Status: ${relation.created ? "created" : "exists"}`);
       } catch (error) {
         reportError(error);
       }
@@ -619,7 +621,7 @@ program
   .action(async () => {
     try {
       const config = await loadConfig();
-      const result = await runWikiDoctor(config);
+       const result = await doctorThroughCore(config, "cli") as Awaited<ReturnType<typeof doctorThroughCore>>;
 
       console.log(`CLI version: ${thothVersion}`);
       console.log(`MCP version: ${thothVersion}`);

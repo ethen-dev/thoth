@@ -7,19 +7,24 @@ configurada en `thoth.config.json`. La superficie real es la siguiente.
 
 | Tool | Parámetros |
 | --- | --- |
+| `wiki_init` | opcionales `dryRun`, `confirmed`, `confirmationToken` |
 | `wiki_search` | `query`; opcionales `type`, `status`, `tag`, `limit` (1-20, por defecto 20) |
 | `wiki_list` | opcionales `type`, `status`, `tag` |
 | `wiki_show` | `id`; `mode`: `content`, `metadata` o `raw` |
 | `wiki_capture` | `content`; opcionales `title`, `type`, `status`, `tags` (array), `projectId` |
 | `wiki_update` | `id`; opcionales `title`, `type`, `status`, `tags` (array) |
 | `wiki_append` | `id`, `content`; opcional `section` |
-| `wiki_relate` | `sourceId`, `targetId`, `relation` |
-| `wiki_index` | sin parámetros |
+| `wiki_relate` | `sourceId`, `targetId`, `relation`; opcionales `confirmed`, `confirmationToken` |
+| `wiki_index` | opcionales `human`, `dryRun`, `curated`, `categoryPages`, `type`, `maxPerSection`, `confirmed`, `confirmationToken` |
 | `wiki_lint` | sin parámetros |
 | `wiki_log` | `content`; opcionales `kind`, `project`, `ref` |
 | `wiki_source_list` / `wiki_source_show` | Lectura de fuentes por filtros o `id` |
 | `wiki_source_add` | `content`, `title`; metadatos opcionales |
 | `wiki_source_link` | `sourceId`, `targetId` |
+
+`wiki_init` planifica la creación de estructura, `index.md` y `log.md` sin
+sobrescribir archivos existentes. `dryRun` no escribe; la ejecución requiere
+la confirmación y el token exactos de la propuesta.
 
 `wiki_capture` no acepta fuentes (`type: source`); se crean con `source add`
 en la CLI. Para `type: task`, `projectId` debe identificar un proyecto
@@ -90,18 +95,25 @@ estructurado `invalid_input` y no una excepción de despacho. Las escrituras
 requieren `confirmed: true`. `query` solo devuelve búsqueda resumida; `show` es
 un intent explícito que requiere un id seleccionado.
 
-Esta es la ruta estructurada provider-agnostic: los writes requieren
-confirmación y las acciones no atómicas se rechazan. Las tools MCP legacy
-siguen existiendo por compatibilidad y aún no están migradas al Core; el Core
-no constituye una garantía global sobre todas las tools.
+Esta es la ruta estructurada provider-agnostic: los writes requieren siempre
+`confirmed: true` y el token exacto; las acciones no atómicas se rechazan.
+Las formas de las tools se mantienen por compatibilidad, pero las operaciones
+de wiki migradas pasan por el Core y su auditoría MCP.
 
 `wiki_search` ya usa el intent Core `query` mediante un adaptador compartido:
 conserva resultados resumidos, `limit` opcional entero de 1 a 20 (por defecto
 20), filtros `type`, `status` y `tag`, además de su envoltura JSON/content.
 `wiki_list`, `wiki_show`, `wiki_lint` y `wiki_source_list/show` usan adapters de
-lectura del Core. `wiki_capture`, `wiki_update`, `wiki_append`, `wiki_log` y
-`wiki_source_add/link` planifican y ejecutan mediante el Core: devuelven una
-propuesta por defecto y requieren `confirmed` o el `confirmationToken` exacto.
+lectura del Core. `wiki_init`, `wiki_capture`, `wiki_update`, `wiki_append`,
+`wiki_log` y `wiki_source_add/link` planifican y ejecutan mediante el Core:
+devuelven una propuesta por defecto y requieren `confirmed: true` junto con el
+`confirmationToken` exacto. No se ejecuta ninguna escritura con solo uno de
+los dos valores.
 Mantienen las formas legacy `{documents}` y `{content,metadata,raw}`.
-`wiki_relate` y `wiki_index` quedan fuera de esta migración, igual que las
-operaciones sin intención atómica equivalente.
+`wiki_relate` usa el Core con plan, propuesta, confirmación, token y auditoría
+MCP. Por compatibilidad solo cambia el origen; `syncLinks: true` opta
+explícitamente por sincronización derivada multiarchivo atómica. La tool
+`wiki_sync_links` ofrece plan/execute, `dryRun`, token y auditoría. `wiki_index`
+usa el Core con plan, token, auditoría y batch atómico. `dryRun` no escribe.
+`curated`, `categoryPages`, `type` y `maxPerSection` son rechazados si `human`
+no es exactamente `true`; no se ignoran silenciosamente.

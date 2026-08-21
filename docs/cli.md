@@ -18,11 +18,14 @@ y las escrituras `capture`, `update`, `append`, `log` y `source add/link`, pasan
 por el Core. Las escrituras muestran una propuesta por defecto; usa
 `--confirmed` y el token de la propuesta para ejecutarlas. Nunca mutan
 silenciosamente.
+`--confirmed` sin el token exacto siempre es rechazado, también para las
+escrituras ya migradas al Core.
 
 ### Workspace
 
-- `thoth init`: crea la wiki configurada, sus directorios requeridos,
-  `index.md` y `log.md` si no existen. No sobrescribe esos archivos.
+- `thoth init [--dry-run] [--confirmed --token <token>]`: planifica y, tras
+  confirmación exacta, crea la wiki configurada, sus directorios requeridos,
+  `index.md` y `log.md` si no existen. No sobrescribe archivos existentes.
 - `thoth status`: muestra workspace, configuración, ruta de wiki, existencia
   de la wiki y del índice, y directorios ausentes.
 - `thoth doctor`: comprueba configuración, estructura, lint, índices y
@@ -37,7 +40,7 @@ silenciosamente.
   `Notes`).
 - `thoth search <query> [--type <type>] [--status <status>] [--tag <tag>] [--limit <1-20>]`; `query` admite de 1 a 500 caracteres y `--limit` es un entero opcional de 1 a 20 (por defecto 20).
 - `thoth update <id> [--title <title>] [--type <type>] [--status <status>] [--tag <tag>]...`
-- `thoth relate <source> <target> --relation <relation>`
+- `thoth relate <source> <target> --relation <relation> [--confirmed --token <token>]`
 
 Las relaciones válidas son: `belongs_to`, `mentions`, `depends_on`,
 `continues`, `contradicts`, `supports`, `references`, `related_to`,
@@ -53,8 +56,10 @@ normalizado. `capture` recibe contenido textual directo; no implementa `--file` 
 requieren `--project` y un proyecto existente. `show` ofrece `--raw` y
 `--metadata`; no existe `--summary`.
 
-`search` mantiene su adapter y contrato legacy. `relate`, `index`, `sync-links`,
-`init`, `status` y `doctor` permanecen fuera de esta migración.
+`search` mantiene su adapter y contrato legacy. `relate` pasa por el Core con
+plan, propuesta, confirmación y token. Solo actualiza un documento fuente por
+ ejecución; `--sync-links` opta explícitamente por sincronización derivada
+multiarchivo atómica. `sync-links` usa plan/execute, `--dry-run` y token.
 
 Los tipos documentales válidos son: `project`, `note`, `idea`, `decision`,
 `implementation`, `session`, `log`, `research`, `source`, `entity`,
@@ -71,11 +76,18 @@ referencia Markdown. Los tipos de log válidos son `implementation`,
 
 ### Índices y enlaces
 
-- `thoth index [--human] [--curated] [--category-pages] [--type <type>] [--max-per-section <n>]`
-  regenera índices derivados. Las opciones adicionales requieren `--human`.
+- `thoth index [--human] [--dry-run] [--curated] [--category-pages] [--type <type>] [--max-per-section <n>]`
+  planifica y regenera índices derivados. Las escrituras requieren confirmar el
+  plan con su token (`thoth core plan` / `thoth core execute`); `--dry-run`
+  valida y reporta sin escribir. El índice técnico y la vista humana se validan
+  y publican en el mismo batch atómico.
 - `thoth lint` valida documentos e índices sin modificar la wiki.
-- `thoth sync-links` sincroniza enlaces Markdown desde `related` del
+- `thoth sync-links` planifica y sincroniza enlaces Markdown desde `related` del
   frontmatter.
+
+`init --dry-run` es read-only y muestra los recursos que faltan. Sin `--dry-run`
+la primera ejecución devuelve una propuesta y token; repetir con ambos flags
+ejecuta de forma idempotente y revierte los recursos nuevos si falla.
 
 ### Fuentes raw
 

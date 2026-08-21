@@ -1,6 +1,6 @@
 import type { ResolvedThothConfig } from "./config.js";
 
-export const coreIntents = ["query", "list", "show", "capture", "update", "append", "relate", "log", "index", "lint", "source_add", "source_link", "clarify", "ignore"] as const;
+export const coreIntents = ["query", "list", "show", "status", "doctor", "init", "capture", "update", "append", "relate", "sync_links", "log", "index", "lint", "source_add", "source_link", "clarify", "ignore"] as const;
 export type CoreIntent = (typeof coreIntents)[number];
 export const maxCorePlanSteps = 20;
 
@@ -11,9 +11,9 @@ export type IntentRequest = {
 };
 
 export type CoreAction =
-  | "skill.wiki-query" | "wiki.list" | "wiki.show" | "wiki.lint"
-  | "wiki.index" | "wiki.capture" | "wiki.update" | "wiki.append"
-  | "wiki.relate" | "wiki.log" | "wiki.source.add" | "wiki.source.link";
+  | "skill.wiki-query" | "wiki.list" | "wiki.show" | "wiki.status" | "wiki.doctor" | "wiki.lint"
+   | "wiki.init" | "wiki.index" | "wiki.capture" | "wiki.update" | "wiki.append"
+   | "wiki.relate" | "wiki.sync-links" | "wiki.log" | "wiki.source.add" | "wiki.source.link";
 
 export type PlanStep = {
   id: string;

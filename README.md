@@ -16,6 +16,30 @@ Usable local MVP components:
 - JSON Schemas for wiki documents and derived indexes.
 - External wiki support via `thoth.config.json`.
 
+### Fase 1 de migración segura
+
+`status` y `doctor` atraviesan ahora el Core como intents read-only (`wiki.status`
+and `wiki.doctor`) desde CLI y MCP. `doctor` es estrictamente diagnóstico:
+comprueba la existencia del índice y nunca lo reconstruye ni escribe archivos
+(la auditoría, si está habilitada, sigue siendo el único registro operativo).
+La planificación y ejecución emiten auditoría con `surface: cli` o `surface: mcp`,
+sin una auditoría adicional de la superficie.
+
+`init`, `relate`, `sync-links` e `index` usan ahora el Core con plan, token,
+confirmación explícita, auditoría y las garantías de escritura de cada acción.
+`init --dry-run` no escribe; para crear recursos se requieren siempre
+`confirmed=true` y el token exacto.
+
+### Fase 4 de migración segura
+
+`index` construye `.thoth/index.json`, `.thoth/relations.json` y, si se solicita,
+la vista humana en memoria. Valida todos los documentos derivados antes de
+publicarlos con un único `lock + atomicWriteBatch`; las páginas humanas y de
+categoría generadas que ya no corresponden se eliminan en ese mismo batch y se
+restauran durante el rollback. `--dry-run` no escribe. Las opciones
+`curated`, `category-pages`, `type` y `max-per-section` requieren `human: true`
+también en la ruta Core/MCP.
+
 ## Install For Development
 
 ```bash
@@ -127,6 +151,7 @@ Implemented MCP tools:
 - `wiki_relate`
 - `wiki_index`
 - `wiki_lint`
+- `wiki_status`, `wiki_doctor`
 - `wiki_log`
 - `skill_list`, `skill_show`, `skill_validate`, `skill_run`
 - `core_plan`, `core_execute`
@@ -179,8 +204,10 @@ thoth skills run wiki-ingest --mode dry-run --input '{"content":"..."}'
 ```
 
 `dry-run` never writes. Mutations without `confirmed=true` return a
-`confirmation_required` proposal. `relate`, `log`, `index`, `source_link` and
-multi-file actions remain `non_atomic_action`.
+`confirmation_required` proposal, incluso si se presenta el token; cualquier
+escritura exige ambos valores exactos. `index` supports atomic multi-file
+output; `init` uses a workspace lock, idempotent creation, preservation of
+existing files, and rollback of resources created by a failed initialization.
 
 `wiki-config` is the first real configuration mutation: only `defaultType`,
 `defaultStatus` and `dateFormat` are allowlisted. It preserves known fields that
@@ -208,10 +235,9 @@ npm run build
 ```
 
 Audit is enabled by default, append-only and protected by the existing workspace
-lock. Core, skills and agents emit audit events. Legacy CLI/MCP wiki commands
-are not yet audited or confirmation-tracked; this task intentionally does not
-migrate those surfaces. It records operation metadata only: prompts, content
-and sensitive inputs are never recorded. Configure `audit.enabled`,
+lock. Core, migrated CLI/MCP wiki commands, skills and agents emit audit events.
+It records operation metadata only: prompts, content and sensitive inputs are
+never recorded. Configure `audit.enabled`,
 `audit.path`, `audit.actor`, `audit.redactKeys`, `audit.maxEntryBytes` and
 `audit.maxStringLength` in `thoth.config.json`; audit write failures return a
 warning internally and never block the operation.

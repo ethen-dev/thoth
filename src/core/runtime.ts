@@ -2,9 +2,12 @@ import { z } from "zod/v4";
 import { createHash } from "node:crypto";
 import {
   addWikiSourceDocument, appendLogEntry, appendWikiDocument, captureWikiDocument,
-  getWikiDocumentById, listWikiDocuments, lintWikiDocuments, relateWikiDocuments,
+  getWikiDocumentById, getWikiStatus, listWikiDocuments, lintWikiDocuments, relateWikiDocuments,
+  runWikiDoctor,
   rebuildWikiIndex, updateWikiDocument, linkWikiSourceDocument,
+  syncWikiRelationLinks,
 } from "../actions/index.js";
+import { initializeWiki } from "../wiki/index.js";
 import { runSkill } from "../skills/runtime.js";
 import { recordAudit, type AuditSurface } from "../audit/index.js";
 import { planConfigMutation } from "./internal-config-mutation.js";
@@ -13,12 +16,12 @@ import { coreIntents, maxCorePlanSteps, type CoreAction, type CoreError, type Co
 
 const limits = { candidates: 20 } as const;
 const intentActions: Record<string, CoreAction> = {
-  query: "skill.wiki-query", list: "wiki.list", show: "wiki.show", lint: "wiki.lint", index: "wiki.index",
-  capture: "wiki.capture", update: "wiki.update", append: "wiki.append", relate: "wiki.relate", log: "wiki.log",
-  source_add: "wiki.source.add", source_link: "wiki.source.link",
+  query: "skill.wiki-query", list: "wiki.list", show: "wiki.show", status: "wiki.status", doctor: "wiki.doctor", lint: "wiki.lint", index: "wiki.index",
+  capture: "wiki.capture", update: "wiki.update", append: "wiki.append", relate: "wiki.relate", sync_links: "wiki.sync-links", log: "wiki.log",
+  source_add: "wiki.source.add", source_link: "wiki.source.link", init: "wiki.init",
 };
-const writeActions = new Set<CoreAction>(["wiki.index", "wiki.capture", "wiki.update", "wiki.append", "wiki.relate", "wiki.log", "wiki.source.add", "wiki.source.link"]);
-const nonAtomicActions = new Set<CoreAction>(["wiki.index", "wiki.relate"]);
+const writeActions = new Set<CoreAction>(["wiki.init", "wiki.index", "wiki.capture", "wiki.update", "wiki.append", "wiki.relate", "wiki.sync-links", "wiki.log", "wiki.source.add", "wiki.source.link"]);
+const nonAtomicActions = new Set<CoreAction>();
 const actionSet = new Set<CoreAction>([...Object.values(intentActions), ...writeActions]);
 const emptyFilter = z.preprocess((value) => value === "" ? undefined : value, z.string().min(1).optional());
 
@@ -32,10 +35,9 @@ export function planIntent(_config: ResolvedThothConfig, request: IntentRequest)
   if (!expected || request.action !== undefined && request.action !== expected) {
     return { ...base, status: "error", error: coreError("not_allowlisted", `Action ${String(request.action)} is not allowlisted for intent ${intent}`) };
   }
-  if (nonAtomicActions.has(expected)) return { ...base, status: "error", error: coreError("non_atomic_action", `Action ${expected} is not available without a transaction`) };
   const input = validateStepInput(intent, request.input, expected);
   if (input.error) return { ...base, status: "error", error: input.error };
-  const step: PlanStep = { id: "step-1", action: expected, input: input.value, write: writeActions.has(expected), summary: intent === "query" ? "Progressive wiki retrieval (summaries only)" : `${intent} through the local wiki handler` };
+  const step: PlanStep = { id: "step-1", action: expected, input: input.value, write: isWriteStep(expected, input.value), summary: intent === "query" ? "Progressive wiki retrieval (summaries only)" : `${intent} through the local wiki handler` };
   const plan = { ...base, steps: [step], confirmationRequired: step.write };
   return step.write ? { ...plan, confirmationToken: tokenForPlan(plan) } : plan;
 }
@@ -66,8 +68,8 @@ export async function executePlan(config: ResolvedThothConfig, candidate: unknow
   const writes = plan.steps.filter((step) => step.write);
   if (writes.length > 1) { const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("non_atomic_plan", "Plans with more than one write are not supported") }; await auditCore(config, "rejection", result, started, surface); return result; }
   if (plan.confirmationRequired !== (writes.length > 0)) { const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("invalid_input", "confirmationRequired does not match plan writes") }; await auditCore(config, "rejection", result, started, surface); return result; }
-  if (writes.length > 0 && options.confirmationToken !== undefined && options.confirmationToken !== plan.confirmationToken) { const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("confirmation_required", "Confirmation token does not match the plan") }; await auditCore(config, "rejection", result, started, surface); return result; }
-  if (writes.length > 0 && !options.confirmed && options.confirmationToken !== plan.confirmationToken) { const result = { ok: true, status: "proposal" as const, intent: plan.intent, plan, error: coreError("confirmation_required", "Confirmation is required before writing") }; await auditCore(config, "proposal", result, started, surface); return result; }
+   if (writes.length > 0 && options.confirmed !== true) { const result = { ok: true, status: "proposal" as const, intent: plan.intent, plan, error: coreError("confirmation_required", "confirmed: true and the exact confirmation token are required before writing") }; await auditCore(config, "proposal", result, started, surface); return result; }
+   if (writes.length > 0 && options.confirmationToken !== plan.confirmationToken) { const result = { ok: false, status: "error" as const, intent: plan.intent, error: coreError("confirmation_required", "An exact confirmation token is required to execute writes") }; await auditCore(config, "rejection", result, started, surface); return result; }
   try {
     const results: unknown[] = [];
     for (const step of plan.steps) results.push(await executeStep(config, step));
@@ -93,7 +95,7 @@ function validatePlan(candidate: unknown): { ok: true; plan: ThothPlan } | { ok:
   if (!expected || !coreIntents.includes(intent as never)) return { ok: false, intent, error: coreError("not_allowlisted", `Intent is not allowlisted: ${intent}`) };
   for (const step of parsed.data.steps) {
     if (step.action !== expected || !actionSet.has(step.action as CoreAction)) return { ok: false, intent, error: coreError("not_allowlisted", `Action ${step.action} is not allowlisted for intent ${intent}`) };
-    if (step.write !== writeActions.has(step.action as CoreAction)) return { ok: false, intent, error: coreError("invalid_input", "Plan write flags do not match its allowlist") };
+    if (step.write !== isWriteStep(step.action as CoreAction, step.input)) return { ok: false, intent, error: coreError("invalid_input", "Plan write flags do not match its allowlist") };
     if (nonAtomicActions.has(step.action as CoreAction)) return { ok: false, intent, error: coreError("non_atomic_action", `Action ${step.action} is not available without a transaction`) };
     const input = validateStepInput(intent, step.input, step.action as CoreAction);
     if (input.error) return { ok: false, intent, error: input.error };
@@ -113,12 +115,16 @@ async function executeStep(config: ResolvedThothConfig, step: PlanStep): Promise
     case "skill.wiki-query": { const result = await runSkill(config, { skillId: "wiki-query", mode: "execute", input }); if (!result.ok) throw new Error(result.error?.message ?? "Query failed"); const data = result.data as { results?: unknown[] }; return { ...data, results: (data.results ?? []).slice(0, limits.candidates) }; }
     case "wiki.list": return listWikiDocuments(config, input);
     case "wiki.show": { const doc = await getWikiDocumentById(config, String(input.id)); if (!doc) throw new Error(`Document not found: ${input.id}`); return input.mode === "raw" ? { raw: doc.raw } : input.mode === "metadata" ? { metadata: doc.metadata } : doc; }
-    case "wiki.lint": return lintWikiDocuments(config);
-    case "wiki.index": return rebuildWikiIndex(config);
+     case "wiki.status": return getWikiStatus(config);
+     case "wiki.doctor": return runWikiDoctor(config);
+     case "wiki.lint": return lintWikiDocuments(config);
+     case "wiki.init": return initializeWiki(config, input as { dryRun?: boolean });
+     case "wiki.index": return rebuildWikiIndex(config, input as never);
     case "wiki.capture": return captureWikiDocument(config, input as never);
     case "wiki.update": return updateWikiDocument(config, input as never);
     case "wiki.append": return appendWikiDocument(config, input as never);
     case "wiki.relate": return relateWikiDocuments(config, input as never);
+    case "wiki.sync-links": return syncWikiRelationLinks(config, input as never);
     case "wiki.log": return appendLogEntry(config, { ...input, projectId: input.projectId as string | undefined } as never);
     case "wiki.source.add": return addWikiSourceDocument(config, input as never);
     case "wiki.source.link": return linkWikiSourceDocument(config, String(input.sourceId), String(input.targetId));
@@ -131,18 +137,26 @@ function validateStepInput(intent: string, value: unknown, action: CoreAction): 
     query: z.object({ query: z.string().trim().min(1).max(500), type: emptyFilter, status: emptyFilter, tag: emptyFilter, limit: z.number().int().min(1).max(20).default(20) }).strict(),
     list: z.object({ type: z.string().optional(), status: z.string().optional(), tag: z.string().optional() }).strict(),
     show: z.object({ id: z.string().trim().min(1), mode: z.enum(["content", "metadata", "raw"]).optional() }).strict(),
-    lint: z.object({}).strict(), index: z.object({}).strict(),
+     lint: z.object({}).strict(), init: z.object({ dryRun: z.boolean().optional() }).strict(), index: z.object({ human: z.boolean().optional(), dryRun: z.boolean().optional(), curated: z.boolean().optional(), categoryPages: z.boolean().optional(), type: z.string().min(1).optional(), maxPerSection: z.number().int().min(0).safe().optional() }).strict().superRefine((value, ctx) => {
+       if (value.human !== true && ["curated", "categoryPages", "type", "maxPerSection"].some((key) => value[key as keyof typeof value] !== undefined)) {
+         ctx.addIssue({ code: "custom", message: "curated, categoryPages, type and maxPerSection require human: true", path: ["human"] });
+       }
+     }),
     capture: z.object({ content: z.string().min(1) }).passthrough(),
     update: z.object({ id: z.string().min(1) }).passthrough(),
     append: z.object({ id: z.string().min(1), content: z.string().min(1) }).passthrough(),
-    relate: z.object({ sourceId: z.string().min(1), targetId: z.string().min(1), relation: z.string().min(1) }).passthrough(),
+    relate: z.object({ sourceId: z.string().min(1), targetId: z.string().min(1), relation: z.string().min(1), syncLinks: z.boolean().optional() }).passthrough(),
+    sync_links: z.object({ dryRun: z.boolean().optional() }).strict(),
     log: z.object({ content: z.string().min(1) }).passthrough(),
     source_add: z.object({ content: z.string().min(1), title: z.string().min(1) }).passthrough(),
     source_link: z.object({ sourceId: z.string().min(1), targetId: z.string().min(1) }).strict(),
   };
-  const schema = schemas[action === "wiki.list" ? "list" : action === "wiki.show" ? "show" : action === "wiki.lint" ? "lint" : action === "wiki.index" ? "index" : intent] ?? z.record(z.string(), z.unknown());
+   const schema = schemas[action === "wiki.list" ? "list" : action === "wiki.show" ? "show" : action === "wiki.lint" ? "lint" : action === "wiki.index" ? "index" : action === "wiki.init" ? "init" : intent] ?? z.record(z.string(), z.unknown());
   const parsed = schema.safeParse(value ?? {});
   return parsed.success ? { value: parsed.data } : { error: coreError("invalid_input", "Invalid intent input", parsed.error.issues) };
+}
+function isWriteStep(action: CoreAction, input: unknown): boolean {
+  return writeActions.has(action) && !((action === "wiki.sync-links" || action === "wiki.index") && (input as { dryRun?: boolean } | undefined)?.dryRun === true);
 }
 function coreError(code: CoreError["code"], message: string, details?: unknown): CoreError { return { code, message, ...(details === undefined ? {} : { details }) }; }
 

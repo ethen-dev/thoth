@@ -163,3 +163,45 @@ La prioridad tecnica inmediata es construir una base simple y fiable:
 8. skill pack LLM Wiki para config, ingest, query, lint, integrate y crystallize
 
 Solo despues deberian entrar grafo, RAG y backends opcionales.
+# Migración segura restante
+
+La fase 1 migra `status` y `doctor` al Core. Ambos intents son read-only,
+tienen esquemas estrictos y propagan la superficie (`cli`/`mcp`) a la auditoría.
+El doctor no reconstruye índices ni realiza reparaciones.
+
+## Fase 2: `relate` en Core
+
+`relate` se migra mediante `plan`/`execute`, con allowlist, propuesta,
+confirmación y token, y auditoría con superficie `cli`/`mcp`. El alcance es
+deliberadamente acotado: un único documento fuente por ejecución; se conserva
+el lock y la escritura atómica existentes, y se actualiza únicamente ese
+Markdown. No se regeneran índices ni se sincronizan enlaces derivados.
+
+## Fase 3: relaciones y enlaces multiarchivo
+
+El contrato Core/storage incorpora `sync_links` y migra `sync-links` mediante
+`plan`/`execute`, token, `dryRun` y auditoría CLI/MCP. Todos los cambios se
+preparan antes de escribir y se aplican bajo lock con `atomicWriteBatch`; un
+fallo intermedio revierte el lote completo. Las operaciones son idempotentes.
+
+`relate` conserva compatibilidad por defecto. La sincronización derivada solo
+se incluye con `syncLinks: true` explícito en el input/plan. `index` e `init` no
+se migran en esta fase.
+
+## Fase 4: `index` atómico en Core
+
+`index` se ejecuta mediante `plan`/`execute`, token, `dryRun` y auditoría CLI/MCP.
+Construye los índices técnicos y la vista humana en memoria, valida ambos antes
+del commit y publica todos los archivos con lock y `atomicWriteBatch`. Las
+páginas humanas y de categoría generadas que quedan obsoletas se eliminan en
+el mismo batch y se restauran en un rollback. Las opciones humanas no se
+ignoran: `curated`, `categoryPages`, `type` y `maxPerSection` requieren
+`human: true`.
+
+## Fase 6 final: `init` en Core
+
+`init` se ejecuta mediante `plan`/`execute` y auditoría con superficie `cli` o
+`mcp`. `dryRun` es read-only; la creación requiere siempre `confirmed: true` y
+el token exacto de la propuesta. La inicialización usa lock, es idempotente,
+preserva archivos existentes y revierte archivos, directorios y lock creados
+si una operación falla parcialmente.
